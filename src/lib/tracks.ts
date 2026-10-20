@@ -8,7 +8,6 @@ export type FeedTrack = {
     file_path: string;
     created_at: string | null;
     visibility?: "private" | "friends";
-    created_at?: string;
     profiles?: { username: string; avatar_url: string | null } | null;
 };
 
