@@ -22,10 +22,12 @@ export default function TrackRow({
     const isCurrent = current?.id === track.id;
     const queued = isQueued(track.id);
 
-    const date = new Date(track.created_at).toLocaleDateString("ru-RU", {
-        day: "numeric",
-        month: "long",
-    });
+    const date = track.created_at
+        ? new Date(track.created_at).toLocaleDateString("ru-RU", {
+            day: "numeric",
+            month: "long",
+        })
+        : "";
 
     return (
         <li
@@ -60,7 +62,7 @@ export default function TrackRow({
                                 <a href={`/profile/${track.owner_id}`} className="hover:text-purple-400 underline decoration-white/20 transition">
                                     {track.profiles?.username ?? "Друг"}
                                 </a>
-                            )} · {date}
+                            )}{date ? ` · ${date}` : ""}
                             {mine && track.visibility === "private" ? " · 🔒 только ты" : ""}
                         </p>
                     </div>

@@ -123,7 +123,7 @@ export default function FriendsPage() {
         // База сама отдаст только треки с доступом «Друзья»
         const { data: trackData } = await supabase
             .from("tracks")
-            .select("id, owner_id, title, artist, file_path, cover_url") // <--- ДОБАВИЛИ cover_url
+            .select("id, owner_id, title, artist, file_path, cover_url, created_at") // <--- ДОБАВИЛИ cover_url
             .in("owner_id", friendIds)
             .eq("visibility", "friends")
             .order("created_at", { ascending: false });
