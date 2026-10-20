@@ -489,7 +489,7 @@ export default function FriendsPage() {
                                 const queued = isQueued(t.id);
 
                                 return (
-                                    <li key={t.id} className={`rounded-xl bg-neutral-800 p-4 ${isCurrent ? 'border border-red-500/60' : ''}`}>
+                                    <li key={t.id} className={`rounded-xl bg-neutral-800 p-4 ${isCurrent ? 'border border-green-500/60' : ''}`}>
                                         <div className="flex items-center justify-between gap-3">
 
                                             {/* --- БЛОК С ОБЛОЖКОЙ ДЛЯ ДРУЗЕЙ --- */}

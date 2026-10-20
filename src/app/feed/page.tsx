@@ -58,7 +58,7 @@ export default function FeedPage() {
 
     if (loading) {
         return (
-            <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-white">
+            <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-red">
                 Загружаем ленту...
             </main>
         );
@@ -78,7 +78,7 @@ export default function FeedPage() {
                     {tracks.length > 0 && (
                         <button
                             onClick={() => playFrom(0)}
-                            className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                            className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-red-500"
                         >
                             ▶ Играть всё
                         </button>
