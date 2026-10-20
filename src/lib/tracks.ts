@@ -13,8 +13,7 @@ export type FeedTrack = {
 };
 
 export const TRACK_SELECT =
-    "id, owner_id, title, artist, file_path, cover_url, visibility, created_at, profiles!owner_id(username, avatar_url)"; // <--- ДОБАВИЛИ cover_url
-
+    "id, owner_id, title, artist, file_path, cover_url, visibility, created_at, profiles!owner_id(username, avatar_url)";
 export function toPlayerTrack(
     track: FeedTrack,
     myId: string | null
