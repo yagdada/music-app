@@ -1,0 +1,2788 @@
+
+===== ./next-env.d.ts =====
+/// <reference types="next" />
+/// <reference types="next/image-types/global" />
+import "./.next/dev/types/routes.d.ts";
+import "./.next/dev/types/root-params.d.ts";
+
+// NOTE: This file should not be edited
+// see https://nextjs.org/docs/app/api-reference/config/typescript for more information.
+
+===== ./README.md =====
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Getting Started
+
+First, run the development server:
+
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+
+## Learn More
+
+To learn more about Next.js, take a look at the following resources:
+
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Deploy on Vercel
+
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+===== ./package.json =====
+{
+  "name": "music-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
+    "next": "16.4.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.2",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
+
+===== ./tsconfig.json =====
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
+
+===== ./next.config.ts =====
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  /* config options here */
+  cacheComponents: true,
+  partialPrefetching: true,
+  turbopack: {
+    rules: {
+      "*.css": {
+        loaders: ["@tailwindcss/turbopack"],
+        as: "*.css",
+      },
+    },
+  },
+};
+
+export default nextConfig;
+
+===== ./src/app/library/page.tsx =====
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { usePlayer } from "@/components/PlayerProvider";
+import TrackRow from "@/components/TrackRow";
+import { useLikes } from "@/lib/useLikes";
+import { TRACK_SELECT, toPlayerTrack, type FeedTrack } from "@/lib/tracks";
+
+type Visibility = "private" | "friends";
+type Tab = "uploaded" | "liked";
+
+const MAX_SIZE = 50 * 1024 * 1024; // 50 МБ
+
+export default function LibraryPage() {
+    const supabase = createClient();
+    const { playQueue, addToQueue, isQueued, current } = usePlayer();
+
+    const [userId, setUserId] = useState<string | null>(null);
+    const { likedIds, ready: likesReady, likeError, toggleLike } =
+        useLikes(userId);
+
+    const [tab, setTab] = useState<Tab>("uploaded");
+    const [uploaded, setUploaded] = useState<FeedTrack[]>([]);
+    const [liked, setLiked] = useState<FeedTrack[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
+    const [message, setMessage] = useState("");
+
+    const [title, setTitle] = useState("");
+    const [artist, setArtist] = useState("");
+    const [visibility, setVisibility] = useState<Visibility>("private");
+    const [file, setFile] = useState<File | null>(null);
+    const [coverFile, setCoverFile] = useState<File | null>(null); // <-- НОВЫЙ СТЕЙТ
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        async function init() {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+
+            if (!user) {
+                window.location.href = "/login";
+                return;
+            }
+
+            setUserId(user.id);
+            await Promise.all([loadUploaded(user.id), loadLiked(user.id)]);
+            setLoading(false);
+        }
+
+        void init();
+    }, []);
+
+    async function loadUploaded(uid: string) {
+        const { data, error } = await supabase
+            .from("tracks")
+            .select(TRACK_SELECT)
+            .eq("owner_id", uid)
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            setMessage(`Ошибка загрузки треков: ${error.message}`);
+            return;
+        }
+
+        setUploaded((data ?? []) as unknown as FeedTrack[]);
+    }
+
+    async function loadLiked(uid: string) {
+        const { data, error } = await supabase
+            .from("track_likes")
+            .select(`created_at, tracks(${TRACK_SELECT})`)
+            .eq("user_id", uid)
+            .order("created_at", { ascending: false });
+
+        if (error) {
+            setMessage(`Ошибка загрузки лайков: ${error.message}`);
+            return;
+        }
+
+        const rows = (data ?? []) as unknown as { tracks: FeedTrack | null }[];
+        setLiked(rows.map((r) => r.tracks).filter((t): t is FeedTrack => !!t));
+    }
+
+    const likedVisible = liked.filter((t) => likedIds.has(t.id));
+
+    function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+        const selected = event.target.files?.[0] ?? null;
+        setMessage("");
+
+        if (!selected) {
+            setFile(null);
+            return;
+        }
+
+        if (!selected.type.startsWith("audio/")) {
+            setMessage("Выбери аудиофайл (MP3, M4A, WAV, OGG).");
+            setFile(null);
+            return;
+        }
+
+        if (selected.size > MAX_SIZE) {
+            setMessage("Файл слишком большой. Максимум — 50 МБ.");
+            setFile(null);
+            return;
+        }
+
+        setFile(selected);
+
+        if (!title.trim()) {
+            setTitle(selected.name.replace(/\.[^/.]+$/, ""));
+        }
+    }
+
+    async function uploadTrack(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!file || !userId) return;
+
+        const cleanTitle = title.trim();
+        if (!cleanTitle) {
+            setMessage("Введи название песни.");
+            return;
+        }
+
+        setUploading(true);
+        setMessage("");
+
+        // 1. Загружаем аудиофайл
+        const extension = file.name.split(".").pop()?.toLowerCase() || "mp3";
+        const filePath = `${userId}/${crypto.randomUUID()}.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from("tracks")
+            .upload(filePath, file, { contentType: file.type });
+
+        if (uploadError) {
+            setMessage(`Не удалось загрузить файл: ${uploadError.message}`);
+            setUploading(false);
+            return;
+        }
+
+        // 2. Загружаем обложку (если выбрана)
+        let coverUrl = null;
+        if (coverFile) {
+            const coverExt = coverFile.name.split(".").pop()?.toLowerCase() || "jpg";
+            const coverPath = `${userId}/${crypto.randomUUID()}.${coverExt}`;
+
+            const { error: coverError } = await supabase.storage
+                .from("covers")
+                .upload(coverPath, coverFile);
+
+            if (!coverError) {
+                const { data: publicUrl } = supabase.storage.from("covers").getPublicUrl(coverPath);
+                coverUrl = publicUrl.publicUrl;
+            }
+        }
+
+        // 3. Сохраняем в базу
+        const { error: insertError } = await supabase.from("tracks").insert({
+            title: cleanTitle,
+            artist: artist.trim() || null,
+            file_path: filePath,
+            visibility,
+            cover_url: coverUrl, // <-- ПЕРЕДАЕМ ССЫЛКУ НА ОБЛОЖКУ
+        });
+
+        if (insertError) {
+            await supabase.storage.from("tracks").remove([filePath]);
+            setMessage(`Не удалось сохранить трек: ${insertError.message}`);
+            setUploading(false);
+            return;
+        }
+
+        setTitle("");
+        setArtist("");
+        setVisibility("private");
+        setFile(null);
+        setCoverFile(null); // Очищаем картинку
+        if (fileInputRef.current) fileInputRef.current.value = "";
+
+        await loadUploaded(userId);
+        setMessage("Песня загружена! 🎵");
+        setUploading(false);
+    }
+
+    async function toggleVisibility(track: FeedTrack) {
+        const next: Visibility =
+            track.visibility === "private" ? "friends" : "private";
+
+        const { error } = await supabase
+            .from("tracks")
+            .update({ visibility: next })
+            .eq("id", track.id);
+
+        if (error) {
+            setMessage(`Не удалось изменить доступ: ${error.message}`);
+            return;
+        }
+
+        setUploaded((prev) =>
+            prev.map((t) => (t.id === track.id ? { ...t, visibility: next } : t))
+        );
+    }
+
+    async function deleteTrack(track: FeedTrack) {
+        if (!window.confirm(`Удалить «${track.title}»?`)) return;
+
+        const { error } = await supabase
+            .from("tracks")
+            .delete()
+            .eq("id", track.id);
+
+        if (error) {
+            setMessage(`Не удалось удалить: ${error.message}`);
+            return;
+        }
+
+        await supabase.storage.from("tracks").remove([track.file_path]);
+        setUploaded((prev) => prev.filter((t) => t.id !== track.id));
+    }
+
+    function playUploaded(startIndex: number) {
+        playQueue(
+            uploaded.map((t) => toPlayerTrack(t, userId)),
+            startIndex
+        );
+    }
+
+    function playLiked(startIndex: number) {
+        playQueue(
+            likedVisible.map((t) => toPlayerTrack(t, userId)),
+            startIndex
+        );
+    }
+
+    if (loading) {
+        return (
+            <div className="flex min-h-[50vh] items-center justify-center text-white">
+                Загружаем библиотеку...
+            </div>
+        );
+    }
+
+    const tabClass = (active: boolean) =>
+        `rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            active
+                ? "bg-purple-600 text-white"
+                : "border border-white/10 text-neutral-400 hover:bg-neutral-800"
+        }`;
+
+    return (
+        <div className="mx-auto max-w-2xl text-white">
+            <h1 className="text-3xl font-bold">Моя музыка</h1>
+            <p className="mt-1 text-neutral-400">
+                Твои загрузки и песни, которые ты лайкнул.
+            </p>
+
+            <div className="mt-6 flex gap-2">
+                <button
+                    onClick={() => setTab("uploaded")}
+                    className={tabClass(tab === "uploaded")}
+                >
+                    Загружено мной ({uploaded.length})
+                </button>
+                <button
+                    onClick={() => setTab("liked")}
+                    className={tabClass(tab === "liked")}
+                >
+                    ♥ Понравилось ({likesReady ? likedVisible.length : "…"})
+                </button>
+            </div>
+
+            {(message || likeError) && (
+                <p role="status" className="mt-4 text-sm text-neutral-300">
+                    {message || likeError}
+                </p>
+            )}
+
+            {tab === "uploaded" && (
+                <>
+                    <section className="mt-6 rounded-3xl border border-white/10 bg-neutral-900 p-6">
+                        <h2 className="text-lg font-bold">Загрузить песню</h2>
+
+                        <form onSubmit={uploadTrack} className="mt-4 space-y-4">
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="audio/*"
+                                onChange={onFileChange}
+                                className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-xl file:border-0 file:bg-purple-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-purple-500"
+                            />
+
+                            {/* --- НОВОЕ ПОЛЕ ДЛЯ ОБЛОЖКИ --- */}
+                            <div>
+                                <label className="mb-2 block text-sm text-neutral-400">Обложка (картинка)</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-800 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-neutral-700"
+                                />
+                            </div>
+                            {/* ------------------------------- */}
+
+                            <input
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="Название песни"
+                                maxLength={100}
+                                required
+                                className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+                            />
+
+                            <input
+                                value={artist}
+                                onChange={(e) => setArtist(e.target.value)}
+                                placeholder="Исполнитель (необязательно)"
+                                maxLength={100}
+                                className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+                            />
+
+                            <select
+                                value={visibility}
+                                onChange={(e) => setVisibility(e.target.value as Visibility)}
+                                className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+                            >
+                                <option value="private">🔒 Только я</option>
+                                <option value="friends">👥 Друзья</option>
+                            </select>
+
+                            <button
+                                type="submit"
+                                disabled={uploading || !file}
+                                className="w-full rounded-xl bg-purple-600 px-4 py-3 font-semibold hover:bg-purple-500 disabled:opacity-50"
+                            >
+                                {uploading ? "Загружаем..." : "Загрузить песню"}
+                            </button>
+                        </form>
+                    </section>
+
+                    <ul className="mt-6 space-y-3">
+                        {uploaded.length === 0 && (
+                            <p className="text-center text-neutral-500">
+                                Пока нет песен. Загрузи первую! 🎧
+                            </p>
+                        )}
+
+                        {uploaded.map((track, i) => {
+                            const isCurrent = current?.id === track.id;
+                            const queued = isQueued(track.id);
+
+                            return (
+                                <li
+                                    key={track.id}
+                                    className={`rounded-2xl border bg-neutral-900 p-4 ${
+                                        isCurrent ? "border-purple-500/60" : "border-white/10"
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between gap-3">
+                                        {/* --- ДОБАВИЛИ ОБЛОЖКУ В СПИСОК --- */}
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/5">
+                                                {track.cover_url ? (
+                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                    <img src={track.cover_url} alt="cover" className="h-full w-full object-cover" />
+                                                ) : (
+                                                    <span className="text-xl text-neutral-600">♫</span>
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold">
+                                                    {isCurrent ? "🎧 " : ""}
+                                                    {track.title}
+                                                </p>
+                                                <p className="truncate text-sm text-neutral-400">
+                                                    {track.artist || "Неизвестный исполнитель"}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {/* ---------------------------------- */}
+
+                                        <div className="flex shrink-0 gap-2">
+                                            <button
+                                                onClick={() => toggleLike(track.id)}
+                                                aria-label={likedIds.has(track.id) ? "Убрать лайк" : "Лайкнуть"}
+                                                className={`rounded-xl border border-white/10 px-4 py-2 text-lg leading-none hover:bg-neutral-800 ${
+                                                    likedIds.has(track.id) ? "text-red-500" : "text-neutral-400"
+                                                }`}
+                                            >
+                                                {likedIds.has(track.id) ? "♥" : "♡"}
+                                            </button>
+
+                                            <button
+                                                onClick={() => playUploaded(i)}
+                                                aria-label="Слушать"
+                                                className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                                            >
+                                                ▶
+                                            </button>
+                                            <button
+                                                onClick={() =>
+                                                    addToQueue(toPlayerTrack(track, userId))
+                                                }
+                                                disabled={queued}
+                                                aria-label="Добавить в очередь"
+                                                className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
+                                            >
+                                                {queued ? "✓" : "＋"}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-3 flex items-center justify-between text-sm">
+                                        <button
+                                            onClick={() => toggleVisibility(track)}
+                                            className="rounded-lg border border-white/10 px-3 py-1 hover:bg-neutral-800"
+                                        >
+                                            {track.visibility === "private"
+                                                ? "🔒 Только я"
+                                                : "👥 Друзья"}
+                                        </button>
+
+                                        <button
+                                            onClick={() => deleteTrack(track)}
+                                            className="text-red-400 hover:text-red-300"
+                                        >
+                                            Удалить
+                                        </button>
+                                    </div>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </>
+            )}
+
+            {tab === "liked" && (
+                <>
+                    {likedVisible.length > 0 && (
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                onClick={() => playLiked(0)}
+                                className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                            >
+                                ▶ Играть всё
+                            </button>
+                        </div>
+                    )}
+
+                    {!likesReady ? (
+                        <p className="mt-10 text-center text-neutral-500">Загружаем...</p>
+                    ) : likedVisible.length === 0 ? (
+                        <p className="mt-10 text-center text-neutral-500">
+                            Пока нет лайкнутых песен. Нажми ♡ в ленте или поиске 🎧
+                        </p>
+                    ) : (
+                        <ul className="mt-4 space-y-3">
+                            {likedVisible.map((track, i) => (
+                                <TrackRow
+                                    key={track.id}
+                                    track={track}
+                                    myId={userId}
+                                    onPlay={() => playLiked(i)}
+                                    liked
+                                    onToggleLike={() => toggleLike(track.id)}
+                                />
+                            ))}
+                        </ul>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+===== ./src/app/search/page.tsx =====
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { usePlayer } from "@/components/PlayerProvider";
+import TrackRow from "@/components/TrackRow";
+import { TRACK_SELECT, toPlayerTrack, type FeedTrack } from "@/lib/tracks";
+import { useLikes } from "@/lib/useLikes";
+
+export default function SearchPage() {
+    const supabase = createClient();
+    const { playQueue } = usePlayer();
+
+    const [userId, setUserId] = useState<string | null>(null);
+    const { likedIds, toggleLike } = useLikes(userId);
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<FeedTrack[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [searched, setSearched] = useState(false);
+    const [message, setMessage] = useState("");
+
+    useEffect(() => {
+        async function init() {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+
+            if (!user) {
+                window.location.href = "/login";
+                return;
+            }
+
+            setUserId(user.id);
+        }
+
+        void init();
+    }, []);
+
+    async function search(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        const text = query.trim();
+        if (text.length < 2) {
+            setMessage("Введи минимум 2 символа.");
+            return;
+        }
+
+        setSearching(true);
+        setMessage("");
+
+        // Убираем символы, ломающие фильтр, и экранируем шаблон поиска
+        const safe = text
+            .replace(/[,()"]/g, " ")
+            .trim()
+            .replace(/[\\%_]/g, (c) => `\\${c}`);
+
+        const { data, error } = await supabase
+            .from("tracks")
+            .select(TRACK_SELECT)
+            .or(`title.ilike.%${safe}%,artist.ilike.%${safe}%`)
+            .order("created_at", { ascending: false })
+            .limit(50);
+
+        if (error) {
+            setMessage(`Ошибка поиска: ${error.message}`);
+            setResults([]);
+        } else {
+            setResults((data ?? []) as unknown as FeedTrack[]);
+        }
+
+        setSearched(true);
+        setSearching(false);
+    }
+
+    function playFrom(startIndex: number) {
+        playQueue(
+            results.map((t) => toPlayerTrack(t, userId)),
+            startIndex
+        );
+    }
+
+    return (
+        <main className="min-h-screen bg-neutral-950 px-5 py-8 text-white">
+            <div className="mx-auto max-w-2xl">
+                <h1 className="text-3xl font-bold">Поиск</h1>
+                <p className="mt-1 text-neutral-400">
+                    Ищи песни друзей по названию или исполнителю.
+                </p>
+
+                <form onSubmit={search} className="mt-6 flex gap-2">
+                    <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Название или исполнитель"
+                        maxLength={100}
+                        className="min-w-0 flex-1 rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+                    />
+                    <button
+                        type="submit"
+                        disabled={searching}
+                        className="rounded-xl bg-purple-600 px-5 py-3 font-semibold hover:bg-purple-500 disabled:opacity-50"
+                    >
+                        {searching ? "..." : "Найти"}
+                    </button>
+                </form>
+
+                {message && (
+                    <p role="status" className="mt-4 text-sm text-neutral-300">
+                        {message}
+                    </p>
+                )}
+
+                {searched && results.length === 0 && !message && (
+                    <p className="mt-10 text-center text-neutral-500">
+                        Ничего не нашли 🔍
+                    </p>
+                )}
+
+                {results.length > 0 && (
+                    <ul className="mt-6 space-y-3">
+                        {results.map((track, i) => (
+                            <TrackRow
+                                key={track.id}
+                                track={track}
+                                myId={userId}
+                                onPlay={() => playFrom(i)}
+                                liked={likedIds.has(track.id)}
+                                onToggleLike={() => toggleLike(track.id)}
+                            />
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </main>
+    );
+}
+===== ./src/app/profile/[id]/page.tsx =====
+import { Suspense } from "react";
+import ProfileClient from "./ProfileClient";
+
+export default function ProfilePage({ params }: { params: Promise<{ id: string }> }) {
+    return (
+        <Suspense fallback={<div className="flex min-h-[50vh] items-center justify-center text-white">Загружаем профиль...</div>}>
+            <ProfileContent params={params} />
+        </Suspense>
+    );
+}
+
+// Выносим ожидание params в отдельный компонент внутри Suspense
+async function ProfileContent({ params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
+    return <ProfileClient friendId={id} />;
+}
+===== ./src/app/profile/[id]/ProfileClient.tsx =====
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { usePlayer } from "@/components/PlayerProvider";
+import TrackRow from "@/components/TrackRow";
+import { useLikes } from "@/lib/useLikes";
+import { TRACK_SELECT, toPlayerTrack, type FeedTrack } from "@/lib/tracks";
+
+export default function ProfileClient({ friendId }: { friendId: string }) {
+    const supabase = createClient();
+    const { playQueue } = usePlayer();
+
+    const [userId, setUserId] = useState<string | null>(null);
+    const { likedIds, toggleLike } = useLikes(userId);
+
+    const [profile, setProfile] = useState<{ username: string; avatar_url: string | null } | null>(null);
+    const [tracks, setTracks] = useState<FeedTrack[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        async function init() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) setUserId(user.id);
+
+            // 1. Загружаем профиль друга
+            const { data: profData } = await supabase
+                .from("profiles")
+                .select("username, avatar_url")
+                .eq("id", friendId)
+                .single();
+
+            if (profData) setProfile(profData);
+
+            // 2. Загружаем его треки (база сама отдаст только доступные тебе)
+            const { data: tracksData } = await supabase
+                .from("tracks")
+                .select(TRACK_SELECT)
+                .eq("owner_id", friendId)
+                .order("created_at", { ascending: false });
+
+            if (tracksData) setTracks(tracksData as unknown as FeedTrack[]);
+
+            setLoading(false);
+        }
+        void init();
+    }, [friendId, supabase]);
+
+    if (loading) {
+        return <div className="flex min-h-[50vh] items-center justify-center text-white">Загружаем профиль...</div>;
+    }
+
+    if (!profile) {
+        return <div className="flex min-h-[50vh] items-center justify-center text-white">Пользователь не найден</div>;
+    }
+
+    return (
+        <div className="mx-auto max-w-2xl text-white">
+            <header className="flex items-center gap-6 rounded-3xl border border-white/10 bg-neutral-900 p-8">
+                {profile.avatar_url ? (
+                    <img src={profile.avatar_url} alt="avatar" className="h-24 w-24 rounded-full object-cover"/>
+                ) : (
+                    <div className="flex h-24 w-24 items-center justify-center rounded-full bg-purple-700 text-3xl font-bold">
+                        {profile.username.charAt(0).toUpperCase()}
+                    </div>
+                )}
+                <div>
+                    <h1 className="text-3xl font-bold">{profile.username}</h1>
+                    <p className="mt-1 text-neutral-400">Музыка пользователя</p>
+                </div>
+            </header>
+
+            <div className="mt-8 flex items-center justify-between">
+                <h2 className="text-xl font-bold">Треки ({tracks.length})</h2>
+                {tracks.length > 0 && (
+                    <button
+                        onClick={() => playQueue(tracks.map((t) => toPlayerTrack(t, userId)), 0)}
+                        className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                    >
+                        ▶ Играть всё
+                    </button>
+                )}
+            </div>
+
+            {tracks.length === 0 ? (
+                <p className="mt-6 text-center text-neutral-500">У пользователя пока нет доступных песен.</p>
+            ) : (
+                <ul className="mt-4 space-y-3">
+                    {tracks.map((track, i) => (
+                        <TrackRow
+                            key={track.id}
+                            track={track}
+                            myId={userId}
+                            onPlay={() => playQueue(tracks.map((t) => toPlayerTrack(t, userId)), i)}
+                            liked={likedIds.has(track.id)}
+                            onToggleLike={() => toggleLike(track.id)}
+                        />
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}
+===== ./src/app/profile/page.tsx =====
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+type Profile = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+};
+
+const MAX_AVATAR_SIZE = 2 * 1024 * 1024; // 2 МБ
+const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
+export default function ProfilePage() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [username, setUsername] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const supabase = createClient();
+
+  useEffect(() => {
+    async function loadProfile() {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const { data, error } = await supabase
+          .from("profiles")
+          .select("id, username, avatar_url")
+          .eq("id", user.id)
+          .maybeSingle();
+
+      if (error) {
+        setMessage(`Ошибка загрузки профиля: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      let currentProfile = data;
+
+      if (!currentProfile) {
+        const newProfile = {
+          id: user.id,
+          username:
+              user.user_metadata?.username?.trim() || "Пользователь",
+          avatar_url: null,
+        };
+
+        const { data: inserted, error: insertError } = await supabase
+            .from("profiles")
+            .insert(newProfile)
+            .select("id, username, avatar_url")
+            .single();
+
+        if (insertError) {
+          setMessage(`Ошибка создания профиля: ${insertError.message}`);
+          setLoading(false);
+          return;
+        }
+
+        currentProfile = inserted;
+      }
+
+      setProfile(currentProfile);
+      setUsername(currentProfile.username);
+      setLoading(false);
+    }
+
+    void loadProfile();
+  }, []);
+
+  async function saveProfile() {
+    if (!profile) return;
+
+    const cleanUsername = username.trim();
+
+    if (!cleanUsername) {
+      setMessage("Введи имя пользователя.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage("");
+
+    const { data, error } = await supabase
+        .from("profiles")
+        .update({ username: cleanUsername })
+        .eq("id", profile.id)
+        .select("id, username, avatar_url")
+        .single();
+
+    if (error) {
+      setMessage(`Не удалось сохранить изменения: ${error.message}`);
+    } else {
+      setProfile(data);
+      setUsername(data.username);
+      setMessage("Имя успешно сохранено!");
+    }
+
+    setSaving(false);
+  }
+
+  async function uploadAvatar(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !profile) return;
+
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      setMessage("Выбери изображение в формате JPG, PNG или WebP.");
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_SIZE) {
+      setMessage("Файл слишком большой. Максимум — 2 МБ.");
+      return;
+    }
+
+    setUploading(true);
+    setMessage("");
+
+    const filePath = `${profile.id}/avatar`;
+
+    const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, {
+          upsert: true,
+          contentType: file.type,
+          cacheControl: "3600",
+        });
+
+    if (uploadError) {
+      setMessage(`Не удалось загрузить фото: ${uploadError.message}`);
+      setUploading(false);
+      return;
+    }
+
+    const { data: publicData } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+    // Добавляем метку времени, чтобы браузер сразу показал новое фото
+    const avatarUrl = `${publicData.publicUrl}?t=${Date.now()}`;
+
+    const { data, error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl })
+        .eq("id", profile.id)
+        .select("id, username, avatar_url")
+        .single();
+
+    if (updateError) {
+      setMessage(`Фото загружено, но профиль не обновился: ${updateError.message}`);
+    } else {
+      setProfile(data);
+      setMessage("Фото профиля обновлено!");
+    }
+
+    setUploading(false);
+  }
+
+  async function logout() {
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  }
+
+  if (loading) {
+    return (
+        <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-white">
+          Загружаем профиль...
+        </main>
+    );
+  }
+
+  return (
+      <main className="min-h-screen bg-neutral-950 px-5 py-12 text-white">
+        <div className="mx-auto max-w-2xl">
+          <header className="mb-10 flex items-center justify-between">
+            <a href="/" className="text-xl font-bold">
+              🎵 MusicApp
+            </a>
+
+            <button
+                onClick={logout}
+                className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800"
+            >
+              Выйти
+            </button>
+          </header>
+
+          <section className="rounded-3xl border border-white/10 bg-neutral-900 p-6 sm:p-10">
+            <h1 className="text-3xl font-bold">Мой профиль</h1>
+
+            <p className="mt-2 text-neutral-400">
+              Управляй своим профилем MusicApp.
+            </p>
+
+            <div className="mt-8 flex flex-col items-center gap-4">
+              {profile?.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                      src={profile.avatar_url}
+                      alt="Аватар пользователя"
+                      className="h-28 w-28 rounded-full object-cover"
+                  />
+              ) : (
+                  <div className="flex h-28 w-28 items-center justify-center rounded-full bg-purple-700 text-4xl font-bold">
+                    {username.trim().charAt(0).toUpperCase() || "♫"}
+                  </div>
+              )}
+
+              <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={uploadAvatar}
+                  className="hidden"
+              />
+
+              <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {uploading ? "Загружаем..." : "Изменить фото"}
+              </button>
+
+              <p className="text-xs text-neutral-500">
+                JPG, PNG или WebP, до 2 МБ
+              </p>
+            </div>
+
+            <div className="mt-8">
+              <label
+                  htmlFor="username"
+                  className="mb-2 block text-sm font-medium"
+              >
+                Имя пользователя
+              </label>
+
+              <input
+                  id="username"
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  maxLength={30}
+                  className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+              />
+            </div>
+
+            <button
+                onClick={saveProfile}
+                disabled={saving || !profile}
+                className="mt-5 w-full rounded-xl bg-purple-600 px-4 py-3 font-semibold hover:bg-purple-500 disabled:opacity-50"
+            >
+              {saving ? "Сохраняем..." : "Сохранить профиль"}
+            </button>
+
+            {message && (
+                <p role="status" className="mt-4 text-sm text-neutral-300">
+                  {message}
+                </p>
+            )}
+          </section>
+        </div>
+      </main>
+  );
+}
+===== ./src/app/feed/page.tsx =====
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { usePlayer } from "@/components/PlayerProvider";
+import TrackRow from "@/components/TrackRow";
+import { TRACK_SELECT, toPlayerTrack, type FeedTrack } from "@/lib/tracks";
+import { useLikes } from "@/lib/useLikes";
+
+export default function FeedPage() {
+    const supabase = createClient();
+    const { playQueue } = usePlayer();
+
+    const [userId, setUserId] = useState<string | null>(null);
+    const { likedIds, toggleLike } = useLikes(userId);
+    const [tracks, setTracks] = useState<FeedTrack[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [message, setMessage] = useState("");
+
+    useEffect(() => {
+        async function load() {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+
+            if (!user) {
+                window.location.href = "/login";
+                return;
+            }
+
+            setUserId(user.id);
+
+            // База сама вернёт только твои песни и песни друзей с доступом «Друзья»
+            const { data, error } = await supabase
+                .from("tracks")
+                .select(TRACK_SELECT)
+                .order("created_at", { ascending: false })
+                .limit(50);
+
+            if (error) {
+                setMessage(`Ошибка загрузки ленты: ${error.message}`);
+            } else {
+                setTracks((data ?? []) as unknown as FeedTrack[]);
+            }
+
+            setLoading(false);
+        }
+
+        void load();
+    }, []);
+
+    function playFrom(startIndex: number) {
+        playQueue(
+            tracks.map((t) => toPlayerTrack(t, userId)),
+            startIndex
+        );
+    }
+
+    if (loading) {
+        return (
+            <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-white">
+                Загружаем ленту...
+            </main>
+        );
+    }
+
+    return (
+        <main className="min-h-screen bg-neutral-950 px-5 py-8 text-white">
+            <div className="mx-auto max-w-2xl">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h1 className="text-3xl font-bold">Лента</h1>
+                        <p className="mt-1 text-neutral-400">
+                            Новые песни от тебя и твоих друзей.
+                        </p>
+                    </div>
+
+                    {tracks.length > 0 && (
+                        <button
+                            onClick={() => playFrom(0)}
+                            className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                        >
+                            ▶ Играть всё
+                        </button>
+                    )}
+                </div>
+
+                {message && (
+                    <p role="status" className="mt-4 text-sm text-neutral-300">
+                        {message}
+                    </p>
+                )}
+
+                {tracks.length === 0 && !message ? (
+                    <p className="mt-10 text-center text-neutral-500">
+                        В ленте пока пусто. Загрузи песню или добавь друзей 🎧
+                    </p>
+                ) : (
+                    <ul className="mt-6 space-y-3">
+                        {tracks.map((track, i) => (
+                            <TrackRow
+                                key={track.id}
+                                track={track}
+                                myId={userId}
+                                onPlay={() => playFrom(i)}
+                                liked={likedIds.has(track.id)}
+                                onToggleLike={() => toggleLike(track.id)}
+                            />
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </main>
+    );
+}
+===== ./src/app/layout.tsx =====
+import { Suspense } from "react";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import Sidebar from "@/components/Sidebar";
+import { PlayerProvider } from "@/components/PlayerProvider";
+
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin", "cyrillic"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "MusicApp — Приватная музыкальная библиотека",
+  description: "Закрытое музыкальное приложение для себя и друзей",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html
+      lang="ru"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+    <body className="min-h-full flex bg-background text-foreground">
+    <PlayerProvider>
+      <Suspense fallback={<div className="w-64 shrink-0 border-r border-white/10 bg-neutral-900 md:w-64" />}>
+        <Sidebar />
+      </Suspense>
+      <main className="flex min-h-screen min-w-0 flex-1 flex-col pb-60 pt-14 md:ml-64 md:pb-44 md:pt-0">
+        <div className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 md:px-8 md:py-10 lg:px-12">
+          {children}
+        </div>
+      </main>
+    </PlayerProvider>
+    </body>
+    </html>
+  );
+}
+
+===== ./src/app/api/health/route.ts =====
+import { NextResponse } from "next/server";
+
+export async function GET() {
+  return NextResponse.json({
+    status: "ok",
+    message: "MusicApp backend is running",
+    timestamp: new Date().toISOString(),
+    version: "0.1.0",
+  });
+}
+
+===== ./src/app/friends/page.tsx =====
+"use client";
+
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { usePlayer } from "@/components/PlayerProvider";
+import { toPlayerTrack } from "@/lib/tracks";
+import Link from "next/link";
+
+type Profile = {
+    id: string;
+    username: string;
+    avatar_url: string | null;
+};
+
+type Friendship = {
+    id: string;
+    requester_id: string;
+    addressee_id: string;
+    status: "pending" | "accepted";
+};
+
+type FriendTrack = {
+    id: string;
+    owner_id: string;
+    title: string;
+    artist: string | null;
+    file_path: string;
+    cover_url?: string | null;
+    visibility?: "private" | "friends";
+    created_at?: string;
+    profiles?: { username: string; avatar_url: string | null } | null;
+};
+
+function Avatar({ profile }: { profile?: Profile }) {
+    if (profile?.avatar_url) {
+        return (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+                src={profile.avatar_url}
+                alt=""
+                className="h-10 w-10 shrink-0 rounded-full object-cover"
+            />
+        );
+    }
+
+    return (
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-700 font-bold">
+            {profile?.username?.trim().charAt(0).toUpperCase() || "♫"}
+        </div>
+    );
+}
+
+export default function FriendsPage() {
+    const supabase = createClient();
+    const { playQueue, addToQueue, isQueued, current } = usePlayer();
+
+    const [userId, setUserId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [message, setMessage] = useState("");
+
+    const [friendships, setFriendships] = useState<Friendship[]>([]);
+    const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+    const [friendTracks, setFriendTracks] = useState<FriendTrack[]>([]);
+
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<Profile[]>([]);
+    const [searching, setSearching] = useState(false);
+
+    useEffect(() => {
+        async function init() {
+            const {
+                data: { user },
+            } = await supabase.auth.getUser();
+
+            if (!user) {
+                window.location.href = "/login";
+                return;
+            }
+
+            setUserId(user.id);
+            await loadAll(user.id);
+            setLoading(false);
+        }
+
+        void init();
+    }, []);
+
+    async function loadAll(uid: string) {
+        const { data: fsData, error: fsError } = await supabase
+            .from("friendships")
+            .select("id, requester_id, addressee_id, status");
+
+        if (fsError) {
+            setMessage(`Ошибка загрузки друзей: ${fsError.message}`);
+            return;
+        }
+
+        const list = (fsData ?? []) as Friendship[];
+        setFriendships(list);
+
+        const otherIds = Array.from(
+            new Set(
+                list.map((f) =>
+                    f.requester_id === uid ? f.addressee_id : f.requester_id
+                )
+            )
+        );
+
+        if (otherIds.length === 0) {
+            setProfiles({});
+            setFriendTracks([]);
+            return;
+        }
+
+        const { data: profData } = await supabase
+            .from("profiles")
+            .select("id, username, avatar_url")
+            .in("id", otherIds);
+
+        const map: Record<string, Profile> = {};
+        (profData ?? []).forEach((p) => {
+            map[p.id] = p as Profile;
+        });
+        setProfiles(map);
+
+        const friendIds = list
+            .filter((f) => f.status === "accepted")
+            .map((f) => (f.requester_id === uid ? f.addressee_id : f.requester_id));
+
+        if (friendIds.length === 0) {
+            setFriendTracks([]);
+            return;
+        }
+
+        // База сама отдаст только треки с доступом «Друзья»
+        const { data: trackData } = await supabase
+            .from("tracks")
+            .select("id, owner_id, title, artist, file_path, cover_url") // <--- ДОБАВИЛИ cover_url
+            .in("owner_id", friendIds)
+            .eq("visibility", "friends")
+            .order("created_at", { ascending: false });
+
+        setFriendTracks((trackData ?? []) as FriendTrack[]);
+    }
+
+    function otherId(f: Friendship) {
+        return f.requester_id === userId ? f.addressee_id : f.requester_id;
+    }
+
+    function relationWith(profileId: string) {
+        return friendships.find(
+            (f) => f.requester_id === profileId || f.addressee_id === profileId
+        );
+    }
+
+    async function search(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        if (!userId) return;
+
+        const text = query.trim();
+        if (text.length < 2) {
+            setMessage("Введи минимум 2 символа для поиска.");
+            return;
+        }
+
+        setSearching(true);
+        setMessage("");
+
+        // Экранируем служебные символы шаблона поиска
+        const safe = text.replace(/[\\%_]/g, (c) => `\\${c}`);
+
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("id, username, avatar_url")
+            .ilike("username", `%${safe}%`)
+            .neq("id", userId)
+            .limit(10);
+
+        if (error) {
+            setMessage(`Ошибка поиска: ${error.message}`);
+        } else {
+            setResults((data ?? []) as Profile[]);
+            if (!data || data.length === 0) setMessage("Никого не нашли.");
+        }
+
+        setSearching(false);
+    }
+
+    async function sendRequest(profile: Profile) {
+        if (!userId) return;
+
+        const { error } = await supabase.from("friendships").insert({
+            requester_id: userId,
+            addressee_id: profile.id,
+        });
+
+        if (error) {
+            setMessage(`Не удалось отправить заявку: ${error.message}`);
+            return;
+        }
+
+        setMessage(`Заявка отправлена: ${profile.username}`);
+        await loadAll(userId);
+    }
+
+    async function acceptRequest(f: Friendship) {
+        if (!userId) return;
+
+        const { error } = await supabase
+            .from("friendships")
+            .update({ status: "accepted" })
+            .eq("id", f.id);
+
+        if (error) {
+            setMessage(`Не удалось принять заявку: ${error.message}`);
+            return;
+        }
+
+        await loadAll(userId);
+    }
+
+    async function removeFriendship(f: Friendship, confirmText?: string) {
+        if (!userId) return;
+        if (confirmText && !window.confirm(confirmText)) return;
+
+        const { error } = await supabase
+            .from("friendships")
+            .delete()
+            .eq("id", f.id);
+
+        if (error) {
+            setMessage(`Не удалось выполнить действие: ${error.message}`);
+            return;
+        }
+
+        await loadAll(userId);
+    }
+
+    function playFriendTracks(startIndex: number) {
+        playQueue(
+            friendTracks.map((t) => toPlayerTrack(t as any, userId)),
+            startIndex
+        );
+    }
+
+    if (loading) {
+        return (
+            <main className="flex min-h-screen items-center justify-center bg-neutral-950 text-white">
+                Загружаем друзей...
+            </main>
+        );
+    }
+
+    const incoming = friendships.filter(
+        (f) => f.status === "pending" && f.addressee_id === userId
+    );
+    const outgoing = friendships.filter(
+        (f) => f.status === "pending" && f.requester_id === userId
+    );
+    const friends = friendships.filter((f) => f.status === "accepted");
+
+    return (
+        <main className="min-h-screen bg-neutral-950 px-5 py-12 text-white">
+            <div className="mx-auto max-w-2xl space-y-8">
+                <header className="flex items-center justify-between">
+                    <Link href="/" className="text-xl font-bold">
+                        🎵 MusicApp
+                    </Link>
+
+                    <nav className="flex gap-2">
+                        <Link
+                            href="/library"
+                            className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800"
+                        >
+                            Моя музыка
+                        </Link>
+                        <Link
+                            href="/profile"
+                            className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800"
+                        >
+                            Профиль
+                        </Link>
+                    </nav>
+                </header>
+
+                <section className="rounded-3xl border border-white/10 bg-neutral-900 p-6 sm:p-8">
+                    <h1 className="text-3xl font-bold">Друзья</h1>
+                    <p className="mt-2 text-neutral-400">
+                        Найди друзей по имени пользователя и слушай их музыку.
+                    </p>
+
+                    <form onSubmit={search} className="mt-6 flex gap-2">
+                        <input
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Имя пользователя"
+                            maxLength={30}
+                            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+                        />
+                        <button
+                            type="submit"
+                            disabled={searching}
+                            className="rounded-xl bg-purple-600 px-5 py-3 font-semibold hover:bg-purple-500 disabled:opacity-50"
+                        >
+                            {searching ? "..." : "Найти"}
+                        </button>
+                    </form>
+
+                    {message && (
+                        <p role="status" className="mt-4 text-sm text-neutral-300">
+                            {message}
+                        </p>
+                    )}
+
+                    {results.length > 0 && (
+                        <ul className="mt-4 space-y-2">
+                            {results.map((p) => {
+                                const rel = relationWith(p.id);
+
+                                let action: React.ReactNode;
+                                if (!rel) {
+                                    action = (
+                                        <button
+                                            onClick={() => sendRequest(p)}
+                                            className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold hover:bg-purple-500"
+                                        >
+                                            Добавить
+                                        </button>
+                                    );
+                                } else if (rel.status === "accepted") {
+                                    action = (
+                                        <span className="text-sm text-green-400">Друзья</span>
+                                    );
+                                } else if (rel.requester_id === userId) {
+                                    action = (
+                                        <span className="text-sm text-neutral-400">
+                      Заявка отправлена
+                    </span>
+                                    );
+                                } else {
+                                    action = (
+                                        <button
+                                            onClick={() => acceptRequest(rel)}
+                                            className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold hover:bg-purple-500"
+                                        >
+                                            Принять заявку
+                                        </button>
+                                    );
+                                }
+
+                                return (
+                                    <li
+                                        key={p.id}
+                                        className="flex items-center justify-between gap-3 rounded-xl bg-neutral-800 p-3"
+                                    >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <Avatar profile={p} />
+                                            <span className="truncate font-medium">
+                        {p.username}
+                      </span>
+                                        </div>
+                                        {action}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+
+                {incoming.length > 0 && (
+                    <section className="rounded-3xl border border-purple-500/30 bg-neutral-900 p-6 sm:p-8">
+                        <h2 className="text-xl font-bold">Входящие заявки</h2>
+                        <ul className="mt-4 space-y-2">
+                            {incoming.map((f) => {
+                                const p = profiles[otherId(f)];
+                                return (
+                                    <li
+                                        key={f.id}
+                                        className="flex items-center justify-between gap-3 rounded-xl bg-neutral-800 p-3"
+                                    >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <Avatar profile={p} />
+                                            <span className="truncate font-medium">
+                        {p?.username ?? "Пользователь"}
+                      </span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => acceptRequest(f)}
+                                                className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold hover:bg-purple-500"
+                                            >
+                                                Принять
+                                            </button>
+                                            <button
+                                                onClick={() => removeFriendship(f)}
+                                                className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-neutral-700"
+                                            >
+                                                Отклонить
+                                            </button>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </section>
+                )}
+
+                {outgoing.length > 0 && (
+                    <section className="rounded-3xl border border-white/10 bg-neutral-900 p-6 sm:p-8">
+                        <h2 className="text-xl font-bold">Отправленные заявки</h2>
+                        <ul className="mt-4 space-y-2">
+                            {outgoing.map((f) => {
+                                const p = profiles[otherId(f)];
+                                return (
+                                    <li
+                                        key={f.id}
+                                        className="flex items-center justify-between gap-3 rounded-xl bg-neutral-800 p-3"
+                                    >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <Avatar profile={p} />
+                                            <span className="truncate font-medium">
+                        {p?.username ?? "Пользователь"}
+                      </span>
+                                        </div>
+                                        <button
+                                            onClick={() => removeFriendship(f)}
+                                            className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-neutral-700"
+                                        >
+                                            Отменить
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </section>
+                )}
+
+                <section className="rounded-3xl border border-white/10 bg-neutral-900 p-6 sm:p-8">
+                    <h2 className="text-xl font-bold">Мои друзья ({friends.length})</h2>
+
+                    {friends.length === 0 ? (
+                        <p className="mt-4 text-neutral-500">
+                            Пока никого. Найди друга по имени выше.
+                        </p>
+                    ) : (
+                        <ul className="mt-4 space-y-2">
+                            {friends.map((f) => {
+                                const p = profiles[otherId(f)];
+                                return (
+                                    <li
+                                        key={f.id}
+                                        className="flex items-center justify-between gap-3 rounded-xl bg-neutral-800 p-3"
+                                    >
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <Avatar profile={p} />
+                                            <span className="truncate font-medium">
+                        {p?.username ?? "Пользователь"}
+                      </span>
+                                        </div>
+                                        <button
+                                            onClick={() =>
+                                                removeFriendship(
+                                                    f,
+                                                    `Удалить ${p?.username ?? "пользователя"} из друзей?`
+                                                )
+                                            }
+                                            className="text-sm text-red-400 hover:text-red-300"
+                                        >
+                                            Удалить
+                                        </button>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+
+                <section className="rounded-3xl border border-white/10 bg-neutral-900 p-6 sm:p-8">
+                    <h2 className="text-xl font-bold">Музыка друзей</h2>
+
+                    {friendTracks.length === 0 ? (
+                        <p className="mt-4 text-neutral-500">
+                            Друзья пока не открыли ни одной песни.
+                        </p>
+                    ) : (
+                        <ul className="mt-4 space-y-3">
+                            {friendTracks.map((t, i) => {
+                                const isCurrent = current?.id === t.id;
+                                const queued = isQueued(t.id);
+
+                                return (
+                                    <li key={t.id} className={`rounded-xl bg-neutral-800 p-4 ${isCurrent ? 'border border-purple-500/60' : ''}`}>
+                                        <div className="flex items-center justify-between gap-3">
+
+                                            {/* --- БЛОК С ОБЛОЖКОЙ ДЛЯ ДРУЗЕЙ --- */}
+                                            <div className="flex min-w-0 items-center gap-3">
+                                                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-900 flex items-center justify-center border border-white/5">
+                                                    {t.cover_url ? (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img src={t.cover_url} alt="cover" className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        <span className="text-xl text-neutral-600">♫</span>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate font-semibold">
+                                                        {isCurrent ? "🎧 " : ""}
+                                                        {t.title}
+                                                    </p>
+                                                    <p className="truncate text-sm text-neutral-400">
+                                                        {t.artist || "Неизвестный исполнитель"} ·{" "}
+                                                        {profiles[t.owner_id]?.username ?? "Друг"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            {/* ---------------------------------- */}
+
+                                            <div className="flex shrink-0 gap-2">
+                                                <button
+                                                    onClick={() => playFriendTracks(i)}
+                                                    className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                                                >
+                                                    ▶
+                                                </button>
+                                                <button
+                                                    onClick={() => addToQueue(toPlayerTrack(t as any, userId))}
+                                                    disabled={queued}
+                                                    className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
+                                                >
+                                                    {queued ? "✓" : "＋"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
+                </section>
+            </div>
+        </main>
+    );
+}
+===== ./src/app/page.tsx =====
+import Header from "@/components/Header";
+
+export default function HomePage() {
+  return (
+    <div>
+      <Header
+        title="Лента"
+        subtitle="Последние треки от тебя и друзей"
+      />
+
+      <div className="rounded-xl border border-border bg-card p-8 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-card-hover text-3xl">
+          🎵
+        </div>
+        <h2 className="mb-2 text-lg font-medium">Пока здесь пусто</h2>
+        <p className="mx-auto max-w-sm text-sm text-muted">
+          Когда появятся первые треки, они будут отображаться здесь в виде ленты.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+===== ./src/app/globals.css =====
+@import "tailwindcss";
+
+:root {
+  --background: #0f0f0f;
+  --foreground: #f5f5f5;
+  --card: #1a1a1a;
+  --card-hover: #242424;
+  --accent: #ff5500;
+  --accent-hover: #ff6a1a;
+  --muted: #a3a3a3;
+  --border: #2a2a2a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-hover: var(--card-hover);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+/* Увеличенный базовый размер текста */
+html {
+  font-size: 18px;
+}
+
+body {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+===== ./src/app/login/page.tsx =====
+"use client";
+
+import { useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+export default function LoginPage() {
+    const supabase = createClient();
+
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [username, setUsername] = useState("");
+    const [isRegister, setIsRegister] = useState(false);
+    const [message, setMessage] = useState("");
+    const [loading, setLoading] = useState(false);
+
+    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+        setMessage("");
+        setLoading(true);
+
+        try {
+            if (isRegister) {
+                const { data, error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        data: {
+                            username,
+                        },
+                    },
+                });
+
+                if (error) throw error;
+
+                if (data.session) {
+                    window.location.href = "/profile";
+                } else {
+                    setMessage(
+                        "Аккаунт создан! Проверь почту и подтверди регистрацию, если это требуется."
+                    );
+                }
+            } else {
+                const { error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+
+                if (error) throw error;
+
+                window.location.href = "/profile";
+            }
+        } catch (error) {
+            setMessage(
+                error instanceof Error
+                    ? error.message
+                    : "Не удалось выполнить операцию."
+            );
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    return (
+        <main className="flex min-h-screen items-center justify-center bg-neutral-950 px-5 py-10 text-white">
+            <section className="w-full max-w-md rounded-3xl border border-white/10 bg-neutral-900 p-8 shadow-2xl sm:p-10">
+                <a
+                    href="/"
+                    className="text-sm text-neutral-400 transition hover:text-white"
+                >
+                    ← На главную
+                </a>
+
+                <div className="mb-8 mt-8 text-center">
+                    <div className="mb-4 text-5xl">🎵</div>
+
+                    <h1 className="text-3xl font-bold tracking-tight">
+                        MusicApp
+                    </h1>
+
+                    <p className="mt-3 text-neutral-400">
+                        {isRegister
+                            ? "Создай аккаунт и делись музыкой с друзьями"
+                            : "Войди в свой музыкальный мир"}
+                    </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    {isRegister && (
+                        <div>
+                            <label
+                                htmlFor="username"
+                                className="mb-2 block text-sm font-medium"
+                            >
+                                Имя пользователя
+                            </label>
+
+                            <input
+                                id="username"
+                                type="text"
+                                autoComplete="nickname"
+                                value={username}
+                                onChange={(e) => setUsername(e.target.value)}
+                                placeholder="Как тебя называть?"
+                                required
+                                maxLength={30}
+                                className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none transition focus:border-purple-500"
+                            />
+                        </div>
+                    )}
+
+                    <div>
+                        <label
+                            htmlFor="email"
+                            className="mb-2 block text-sm font-medium"
+                        >
+                            Электронная почта
+                        </label>
+
+                        <input
+                            id="email"
+                            type="email"
+                            autoComplete="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="you@example.com"
+                            required
+                            className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none transition focus:border-purple-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label
+                            htmlFor="password"
+                            className="mb-2 block text-sm font-medium"
+                        >
+                            Пароль
+                        </label>
+
+                        <input
+                            id="password"
+                            type="password"
+                            autoComplete={
+                                isRegister ? "new-password" : "current-password"
+                            }
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Не менее 8 символов"
+                            minLength={8}
+                            required
+                            className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none transition focus:border-purple-500"
+                        />
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={loading}
+                        className="w-full rounded-xl bg-purple-600 px-4 py-3.5 font-semibold transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                        {loading
+                            ? "Подожди..."
+                            : isRegister
+                                ? "Создать аккаунт"
+                                : "Войти"}
+                    </button>
+                </form>
+
+                {message && (
+                    <p
+                        role="status"
+                        className="mt-5 rounded-xl bg-neutral-800 p-4 text-sm text-neutral-200"
+                    >
+                        {message}
+                    </p>
+                )}
+
+                <div className="mt-6 text-center text-sm text-neutral-400">
+                    {isRegister ? "Уже есть аккаунт?" : "Впервые в MusicApp?"}
+
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setIsRegister(!isRegister);
+                            setMessage("");
+                        }}
+                        className="ml-2 font-semibold text-purple-400 hover:text-purple-300"
+                    >
+                        {isRegister ? "Войти" : "Регистрация"}
+                    </button>
+                </div>
+            </section>
+        </main>
+    );
+}
+===== ./src/components/TrackRow.tsx =====
+"use client";
+
+import { usePlayer } from "@/components/PlayerProvider";
+import { toPlayerTrack, type FeedTrack } from "@/lib/tracks";
+
+export default function TrackRow({
+                                     track,
+                                     myId,
+                                     onPlay,
+                                     liked = false,
+                                     onToggleLike,
+                                 }: {
+    track: FeedTrack;
+    myId: string | null;
+    onPlay: () => void;
+    liked?: boolean;
+    onToggleLike?: () => void;
+}) {
+    const { addToQueue, isQueued, current } = usePlayer();
+
+    const mine = track.owner_id === myId;
+    const isCurrent = current?.id === track.id;
+    const queued = isQueued(track.id);
+
+    const date = new Date(track.created_at).toLocaleDateString("ru-RU", {
+        day: "numeric",
+        month: "long",
+    });
+
+    return (
+        <li
+            className={`rounded-2xl border bg-neutral-900 p-4 ${
+                isCurrent ? "border-purple-500/60" : "border-white/10"
+            }`}
+        >
+            <div className="flex items-center justify-between gap-3">
+                {/* --- НАЧАЛО БЛОКА С ОБЛОЖКОЙ --- */}
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/5">
+                        {track.cover_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={track.cover_url} alt="cover" className="h-full w-full object-cover" />
+                        ) : (
+                            <span className="text-xl text-neutral-600">♫</span>
+                        )}
+                    </div>
+
+                    <div className="min-w-0">
+                        <p className="truncate font-semibold">
+                            {isCurrent ? "🎧 " : ""}
+                            {track.title}
+                        </p>
+                        <p className="truncate text-sm text-neutral-400">
+                            {track.artist || "Неизвестный исполнитель"}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-neutral-500">
+                            {mine ? (
+                                "Ты"
+                            ) : (
+                                <a href={`/profile/${track.owner_id}`} className="hover:text-purple-400 underline decoration-white/20 transition">
+                                    {track.profiles?.username ?? "Друг"}
+                                </a>
+                            )} · {date}
+                            {mine && track.visibility === "private" ? " · 🔒 только ты" : ""}
+                        </p>
+                    </div>
+                </div>
+                {/* --- КОНЕЦ БЛОКА С ОБЛОЖКОЙ --- */}
+
+                <div className="flex shrink-0 gap-2">
+                    {onToggleLike && (
+                        <button
+                            onClick={onToggleLike}
+                            aria-label={liked ? "Убрать лайк" : "Лайкнуть"}
+                            className={`rounded-xl border border-white/10 px-4 py-2 text-lg leading-none hover:bg-neutral-800 ${
+                                liked ? "text-red-500" : "text-neutral-400"
+                            }`}
+                        >
+                            {liked ? "♥" : "♡"}
+                        </button>
+                    )}
+
+                    <button
+                        onClick={onPlay}
+                        aria-label="Слушать"
+                        className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                    >
+                        ▶
+                    </button>
+
+                    <button
+                        onClick={() => addToQueue(toPlayerTrack(track, myId))}
+                        disabled={queued}
+                        aria-label="Добавить в очередь"
+                        className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
+                    >
+                        {queued ? "✓" : "＋"}
+                    </button>
+                </div>
+            </div>
+        </li>
+    );
+}
+===== ./src/components/Header.tsx =====
+"use client";
+
+interface HeaderProps {
+    title: string;
+    subtitle?: string;
+}
+
+export default function Header({ title, subtitle }: HeaderProps) {
+    return (
+        <header className="mb-10">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+                {title}
+            </h1>
+
+            {subtitle && (
+                <p className="mt-3 text-lg text-muted">{subtitle}</p>
+            )}
+        </header>
+    );
+}
+===== ./src/components/Sidebar.tsx =====
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+
+const navItems = [
+    { href: "/feed", label: "Лента", short: "Лента", icon: "🏠" },
+    { href: "/search", label: "Поиск", short: "Поиск", icon: "🔍" },
+    { href: "/library", label: "Моя музыка", short: "Музыка", icon: "📚" },
+    { href: "/friends", label: "Друзья", short: "Друзья", icon: "👥" },
+    { href: "/profile", label: "Профиль", short: "Профиль", icon: "👤" },
+];
+
+export default function Sidebar() {
+    const pathname = usePathname();
+
+    // На странице входа меню не нужно
+    if (pathname === "/login") return null;
+
+    async function logout() {
+        await createClient().auth.signOut();
+        window.location.href = "/login";
+    }
+
+    function isActive(href: string) {
+        return pathname === href || pathname.startsWith(href + "/");
+    }
+
+    const desktopLink = (active: boolean) =>
+        [
+            "flex items-center gap-4 rounded-xl px-4 py-4",
+            "text-base font-medium transition-colors",
+            active
+                ? "bg-accent/15 text-accent"
+                : "text-muted hover:bg-card-hover hover:text-foreground",
+        ].join(" ");
+
+    const mobileLink = (active: boolean) =>
+        [
+            "flex flex-1 flex-col items-center justify-center gap-0.5",
+            "text-[11px] font-medium transition-colors",
+            active ? "text-accent" : "text-muted",
+        ].join(" ");
+
+    return (
+        <>
+            {/* ===== Компьютер: боковое меню ===== */}
+            <aside
+                className={[
+                    "fixed left-0 top-0 z-40 hidden h-screen w-64 flex-col",
+                    "border-r border-border bg-card md:flex",
+                ].join(" ")}
+            >
+                <Link
+                    href="/feed"
+                    className="flex h-20 items-center gap-3 border-b border-border px-6"
+                >
+                    <div
+                        className={[
+                            "flex h-10 w-10 items-center justify-center rounded-xl",
+                            "bg-accent text-lg font-bold text-white",
+                        ].join(" ")}
+                    >
+                        M
+                    </div>
+                    <span className="text-xl font-semibold tracking-tight">
+            MusicApp
+          </span>
+                </Link>
+
+                <nav className="flex-1 space-y-1 p-3">
+                    {navItems.map((item) => (
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className={desktopLink(isActive(item.href))}
+                        >
+                            <span className="text-xl">{item.icon}</span>
+                            {item.label}
+                        </Link>
+                    ))}
+                </nav>
+
+                <div className="space-y-3 border-t border-border p-4">
+                    <button
+                        onClick={logout}
+                        className={[
+                            "w-full rounded-xl border border-border px-4 py-3",
+                            "text-sm font-medium text-muted transition-colors",
+                            "hover:bg-card-hover hover:text-foreground",
+                        ].join(" ")}
+                    >
+                        Выйти
+                    </button>
+                    <p className="text-xs text-muted">
+                        Приватное приложение
+                        <br />
+                        для себя и друзей
+                    </p>
+                </div>
+            </aside>
+
+            {/* ===== Телефон: верхняя полоска ===== */}
+            <header
+                className={[
+                    "fixed inset-x-0 top-0 z-40 flex h-14 items-center",
+                    "justify-between border-b border-border bg-card px-4 md:hidden",
+                ].join(" ")}
+            >
+                <Link href="/feed" className="flex items-center gap-2">
+                    <div
+                        className={[
+                            "flex h-8 w-8 items-center justify-center rounded-lg",
+                            "bg-accent text-sm font-bold text-white",
+                        ].join(" ")}
+                    >
+                        M
+                    </div>
+                    <span className="font-semibold tracking-tight">MusicApp</span>
+                </Link>
+
+                <button
+                    onClick={logout}
+                    className={[
+                        "rounded-lg border border-border px-3 py-1.5 text-sm text-muted",
+                        "hover:bg-card-hover hover:text-foreground",
+                    ].join(" ")}
+                >
+                    Выйти
+                </button>
+            </header>
+
+            {/* ===== Телефон: нижняя панель ===== */}
+            <nav
+                className={[
+                    "fixed inset-x-0 bottom-0 z-40 flex h-16",
+                    "border-t border-border bg-card md:hidden",
+                ].join(" ")}
+            >
+                {navItems.map((item) => (
+                    <Link
+                        key={item.href}
+                        href={item.href}
+                        className={mobileLink(isActive(item.href))}
+                    >
+                        <span className="text-xl leading-none">{item.icon}</span>
+                        {item.short}
+                    </Link>
+                ))}
+            </nav>
+        </>
+    );
+}
+===== ./src/components/PlayerProvider.tsx =====
+"use client";
+
+import {
+    createContext,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
+import { createClient } from "@/lib/supabase/client";
+
+export type PlayerTrack = {
+    id: string;
+    title: string;
+    artist: string | null;
+    file_path: string;
+    cover_url?: string | null;
+    owner_name?: string;
+};
+
+type PlayerContextValue = {
+    current: PlayerTrack | null;
+    isQueued: (id: string) => boolean;
+    playQueue: (tracks: PlayerTrack[], startIndex?: number) => void;
+    addToQueue: (track: PlayerTrack) => void;
+};
+
+const PlayerContext = createContext<PlayerContextValue | null>(null);
+
+export function usePlayer() {
+    const ctx = useContext(PlayerContext);
+    if (!ctx) {
+        throw new Error("usePlayer нужно использовать внутри PlayerProvider");
+    }
+    return ctx;
+}
+
+export function PlayerProvider({ children }: { children: React.ReactNode }) {
+    const supabase = useMemo(() => createClient(), []);
+
+    const [queue, setQueue] = useState<PlayerTrack[]>([]);
+    const [index, setIndex] = useState(0);
+    const [signed, setSigned] = useState<{ path: string; url: string } | null>(
+        null
+    );
+    const [failedPath, setFailedPath] = useState<string | null>(null);
+    const [showQueue, setShowQueue] = useState(false);
+
+    const current = queue[index] ?? null;
+    const currentPath = current?.file_path ?? null;
+
+    const url = signed && signed.path === currentPath ? signed.url : null;
+    const hasError = failedPath !== null && failedPath === currentPath;
+
+    useEffect(() => {
+        if (!currentPath) return;
+
+        let cancelled = false;
+
+        supabase.storage
+            .from("tracks")
+            .createSignedUrl(currentPath, 3600)
+            .then(({ data, error }) => {
+                if (cancelled) return;
+
+                if (error || !data) {
+                    setFailedPath(currentPath);
+                    return;
+                }
+
+                setSigned({ path: currentPath, url: data.signedUrl });
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentPath, supabase]);
+
+    const playQueue = useCallback((tracks: PlayerTrack[], startIndex = 0) => {
+        if (tracks.length === 0) return;
+        setQueue(tracks);
+        setIndex(startIndex);
+    }, []);
+
+    const addToQueue = useCallback((track: PlayerTrack) => {
+        setQueue((prev) =>
+            prev.some((t) => t.id === track.id) ? prev : [...prev, track]
+        );
+    }, []);
+
+    const isQueued = useCallback(
+        (id: string) => queue.some((t) => t.id === id),
+        [queue]
+    );
+
+    function removeAt(i: number) {
+        setQueue((prev) => prev.filter((_, n) => n !== i));
+        setIndex((prev) => (i < prev ? prev - 1 : prev));
+    }
+
+    function clearQueue() {
+        setQueue([]);
+        setIndex(0);
+        setShowQueue(false);
+    }
+
+    function handleEnded() {
+        setIndex((i) => (i + 1 < queue.length ? i + 1 : i));
+    }
+
+    const value = useMemo(
+        () => ({ current, isQueued, playQueue, addToQueue }),
+        [current, isQueued, playQueue, addToQueue]
+    );
+
+    return (
+        <PlayerContext.Provider value={value}>
+            {children}
+
+            {current && (
+                <div className="fixed bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-neutral-900/95 text-white backdrop-blur md:bottom-0 md:left-64">
+                    {showQueue && (
+                        <div className="mx-auto max-h-48 md:max-h-64 max-w-2xl overflow-y-auto border-b border-white/10 p-3">
+                            <div className="mb-2 flex items-center justify-between">
+                                <p className="text-sm font-semibold">
+                                    Очередь ({queue.length})
+                                </p>
+                                <button
+                                    onClick={clearQueue}
+                                    className="text-xs text-red-400 hover:text-red-300"
+                                >
+                                    Очистить
+                                </button>
+                            </div>
+
+                            <ul className="space-y-1">
+                                {queue.map((t, i) => (
+                                    <li
+                                        key={t.id}
+                                        className={`flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm ${
+                                            i === index ? "bg-purple-600/30" : "hover:bg-neutral-800"
+                                        }`}
+                                    >
+                                        <button
+                                            onClick={() => setIndex(i)}
+                                            className="min-w-0 flex-1 truncate text-left"
+                                        >
+                                            {i === index ? "▶ " : `${i + 1}. `}
+                                            {t.title}
+                                            <span className="text-neutral-400">
+                                                {" "}
+                                                · {t.artist || "Неизвестный исполнитель"}
+                                            </span>
+                                        </button>
+
+                                        {i !== index && (
+                                            <button
+                                                onClick={() => removeAt(i)}
+                                                aria-label="Убрать из очереди"
+                                                className="text-neutral-400 hover:text-white"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    <div className="mx-auto flex max-w-2xl items-center gap-4 p-3">
+                        {/* Обложка в плеере */}
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/10">
+                            {current.cover_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={current.cover_url} alt="cover" className="h-full w-full object-cover" />
+                            ) : (
+                                <span className="text-2xl text-neutral-600">♫</span>
+                            )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">
+                                        {current.title}
+                                    </p>
+                                    <p className="truncate text-xs text-neutral-400">
+                                        {current.artist || "Неизвестный исполнитель"}
+                                        {current.owner_name ? ` · ${current.owner_name}` : ""}
+                                    </p>
+                                </div>
+
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                        onClick={() => setIndex((i) => Math.max(0, i - 1))}
+                                        disabled={index === 0}
+                                        aria-label="Предыдущая"
+                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
+                                    >
+                                        ⏮
+                                    </button>
+                                    <button
+                                        onClick={handleEnded}
+                                        disabled={index >= queue.length - 1}
+                                        aria-label="Следующая"
+                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
+                                    >
+                                        ⏭
+                                    </button>
+                                    <button
+                                        onClick={() => setShowQueue((s) => !s)}
+                                        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-neutral-800"
+                                    >
+                                        ☰ {queue.length}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {hasError ? (
+                                <p className="text-sm text-red-400">
+                                    Не удалось загрузить песню.
+                                </p>
+                            ) : url ? (
+                                <audio
+                                    key={current.id}
+                                    controls
+                                    autoPlay
+                                    src={url}
+                                    onEnded={handleEnded}
+                                    className="w-full h-10"
+                                />
+                            ) : (
+                                <p className="text-sm text-neutral-400">Загружаем...</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </PlayerContext.Provider>
+    );
+}
+===== ./src/lib/supabase/client.ts =====
+import { createBrowserClient } from "@supabase/ssr";
+
+export function createClient() {
+    return createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+    );
+}
+===== ./src/lib/useLikes.ts =====
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+
+export function useLikes(userId: string | null) {
+    const supabase = useMemo(() => createClient(), []);
+    const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
+    const [ready, setReady] = useState(false);
+    const [likeError, setLikeError] = useState("");
+
+    useEffect(() => {
+        if (!userId) return;
+
+        let cancelled = false;
+
+        supabase
+            .from("track_likes")
+            .select("track_id")
+            .eq("user_id", userId)
+            .then(({ data, error }) => {
+                if (cancelled) return;
+
+                if (error) {
+                    setLikeError(`Ошибка загрузки лайков: ${error.message}`);
+                } else {
+                    setLikedIds(new Set((data ?? []).map((r) => r.track_id as string)));
+                }
+
+                setReady(true);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [userId, supabase]);
+
+    const toggleLike = useCallback(
+        async (trackId: string) => {
+            if (!userId) return;
+
+            const wasLiked = likedIds.has(trackId);
+            setLikeError("");
+
+            // Сразу меняем сердечко, не дожидаясь ответа базы
+            setLikedIds((prev) => {
+                const next = new Set(prev);
+                if (wasLiked) next.delete(trackId);
+                else next.add(trackId);
+                return next;
+            });
+
+            const { error } = wasLiked
+                ? await supabase
+                    .from("track_likes")
+                    .delete()
+                    .eq("user_id", userId)
+                    .eq("track_id", trackId)
+                : await supabase
+                    .from("track_likes")
+                    .insert({ user_id: userId, track_id: trackId });
+
+            if (error) {
+                // Откатываем, если не получилось
+                setLikedIds((prev) => {
+                    const next = new Set(prev);
+                    if (wasLiked) next.add(trackId);
+                    else next.delete(trackId);
+                    return next;
+                });
+                setLikeError(`Не удалось изменить лайк: ${error.message}`);
+            }
+        },
+        [likedIds, supabase, userId]
+    );
+
+    return { likedIds, ready, likeError, toggleLike };
+}
+===== ./src/lib/tracks.ts =====
+import type { PlayerTrack } from "@/components/PlayerProvider";
+
+export type FeedTrack = {
+    id: string;
+    owner_id: string;
+    title: string;
+    artist: string | null;
+    file_path: string;
+    cover_url: string | null; // <--- ДОБАВИЛИ
+    visibility: "private" | "friends";
+    created_at: string;
+    profiles: { username: string; avatar_url: string | null } | null;
+};
+
+export const TRACK_SELECT =
+    "id, owner_id, title, artist, file_path, cover_url, visibility, created_at, profiles!owner_id(username, avatar_url)";
+export function toPlayerTrack(
+    track: FeedTrack,
+    myId: string | null
+): PlayerTrack {
+    return {
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        file_path: track.file_path,
+        cover_url: track.cover_url, // <--- ДОБАВИЛИ
+        owner_name:
+            track.owner_id === myId ? "Я" : track.profiles?.username ?? "Друг",
+    };
+}
