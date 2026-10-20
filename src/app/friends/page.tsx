@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { usePlayer } from "@/components/PlayerProvider";
+import { toPlayerTrack } from "@/lib/tracks";
+import Link from "next/link";
 
 type Profile = {
     id: string;
@@ -22,6 +25,10 @@ type FriendTrack = {
     title: string;
     artist: string | null;
     file_path: string;
+    // Добавь эти две строчки:
+    visibility?: "private" | "friends";
+    created_at?: string;
+    profiles?: { username: string; avatar_url: string | null } | null;
 };
 
 function Avatar({ profile }: { profile?: Profile }) {
@@ -45,6 +52,7 @@ function Avatar({ profile }: { profile?: Profile }) {
 
 export default function FriendsPage() {
     const supabase = createClient();
+    const { playQueue, addToQueue, isQueued, current } = usePlayer();
 
     const [userId, setUserId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -57,9 +65,6 @@ export default function FriendsPage() {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<Profile[]>([]);
     const [searching, setSearching] = useState(false);
-
-    const [playingId, setPlayingId] = useState<string | null>(null);
-    const [playingUrl, setPlayingUrl] = useState<string | null>(null);
 
     useEffect(() => {
         async function init() {
@@ -228,29 +233,14 @@ export default function FriendsPage() {
             return;
         }
 
-        setPlayingId(null);
-        setPlayingUrl(null);
         await loadAll(userId);
     }
 
-    async function playTrack(track: FriendTrack) {
-        if (playingId === track.id) {
-            setPlayingId(null);
-            setPlayingUrl(null);
-            return;
-        }
-
-        const { data, error } = await supabase.storage
-            .from("tracks")
-            .createSignedUrl(track.file_path, 3600);
-
-        if (error || !data) {
-            setMessage(`Не удалось получить ссылку: ${error?.message ?? ""}`);
-            return;
-        }
-
-        setPlayingId(track.id);
-        setPlayingUrl(data.signedUrl);
+    function playFriendTracks(startIndex: number) {
+        playQueue(
+            friendTracks.map((t) => toPlayerTrack(t, userId)),
+            startIndex
+        );
     }
 
     if (loading) {
@@ -273,23 +263,23 @@ export default function FriendsPage() {
         <main className="min-h-screen bg-neutral-950 px-5 py-12 text-white">
             <div className="mx-auto max-w-2xl space-y-8">
                 <header className="flex items-center justify-between">
-                    <a href="/" className="text-xl font-bold">
+                    <Link href="/" className="text-xl font-bold">
                         🎵 MusicApp
-                    </a>
+                    </Link>
 
                     <nav className="flex gap-2">
-                        <a
+                        <Link
                             href="/library"
                             className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800"
                         >
                             Моя музыка
-                        </a>
-                        <a
+                        </Link>
+                        <Link
                             href="/profile"
                             className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800"
                         >
                             Профиль
-                        </a>
+                        </Link>
                     </nav>
                 </header>
 
@@ -494,34 +484,42 @@ export default function FriendsPage() {
                         </p>
                     ) : (
                         <ul className="mt-4 space-y-3">
-                            {friendTracks.map((t) => (
-                                <li key={t.id} className="rounded-xl bg-neutral-800 p-4">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="truncate font-semibold">{t.title}</p>
-                                            <p className="truncate text-sm text-neutral-400">
-                                                {t.artist || "Неизвестный исполнитель"} ·{" "}
-                                                {profiles[t.owner_id]?.username ?? "Друг"}
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => playTrack(t)}
-                                            className="shrink-0 rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
-                                        >
-                                            {playingId === t.id ? "Скрыть" : "▶ Слушать"}
-                                        </button>
-                                    </div>
+                            {friendTracks.map((t, i) => {
+                                const isCurrent = current?.id === t.id;
+                                const queued = isQueued(t.id);
 
-                                    {playingId === t.id && playingUrl && (
-                                        <audio
-                                            controls
-                                            autoPlay
-                                            src={playingUrl}
-                                            className="mt-4 w-full"
-                                        />
-                                    )}
-                                </li>
-                            ))}
+                                return (
+                                    <li key={t.id} className={`rounded-xl bg-neutral-800 p-4 ${isCurrent ? 'border border-purple-500/60' : ''}`}>
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold">
+                                                    {isCurrent ? "🎧 " : ""}
+                                                    {t.title}
+                                                </p>
+                                                <p className="truncate text-sm text-neutral-400">
+                                                    {t.artist || "Неизвестный исполнитель"} ·{" "}
+                                                    {profiles[t.owner_id]?.username ?? "Друг"}
+                                                </p>
+                                            </div>
+                                            <div className="flex shrink-0 gap-2">
+                                                <button
+                                                    onClick={() => playFriendTracks(i)}
+                                                    className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-semibold hover:bg-purple-500"
+                                                >
+                                                    ▶
+                                                </button>
+                                                <button
+                                                    onClick={() => addToQueue(toPlayerTrack(t, userId))}
+                                                    disabled={queued}
+                                                    className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
+                                                >
+                                                    {queued ? "✓" : "＋"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     )}
                 </section>

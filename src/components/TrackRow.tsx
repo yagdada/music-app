@@ -34,22 +34,41 @@ export default function TrackRow({
             }`}
         >
             <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                    <p className="truncate font-semibold">
-                        {isCurrent ? "🎧 " : ""}
-                        {track.title}
-                    </p>
-                    <p className="truncate text-sm text-neutral-400">
-                        {track.artist || "Неизвестный исполнитель"}
-                    </p>
-                    <p className="mt-1 truncate text-xs text-neutral-500">
-                        {mine ? "Ты" : track.profiles?.username ?? "Друг"} · {date}
-                        {mine && track.visibility === "private" ? " · 🔒 только ты" : ""}
-                    </p>
+                {/* --- НАЧАЛО БЛОКА С ОБЛОЖКОЙ --- */}
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/5">
+                        {track.cover_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={track.cover_url} alt="cover" className="h-full w-full object-cover" />
+                        ) : (
+                            <span className="text-xl text-neutral-600">♫</span>
+                        )}
+                    </div>
+
+                    <div className="min-w-0">
+                        <p className="truncate font-semibold">
+                            {isCurrent ? "🎧 " : ""}
+                            {track.title}
+                        </p>
+                        <p className="truncate text-sm text-neutral-400">
+                            {track.artist || "Неизвестный исполнитель"}
+                        </p>
+                        <p className="mt-1 truncate text-xs text-neutral-500">
+                            {mine ? (
+                                "Ты"
+                            ) : (
+                                <a href={`/profile/${track.owner_id}`} className="hover:text-purple-400 underline decoration-white/20 transition">
+                                    {track.profiles?.username ?? "Друг"}
+                                </a>
+                            )} · {date}
+                            {mine && track.visibility === "private" ? " · 🔒 только ты" : ""}
+                        </p>
+                    </div>
                 </div>
+                {/* --- КОНЕЦ БЛОКА С ОБЛОЖКОЙ --- */}
 
                 <div className="flex shrink-0 gap-2">
-                    {!mine && onToggleLike && (
+                    {onToggleLike && (
                         <button
                             onClick={onToggleLike}
                             aria-label={liked ? "Убрать лайк" : "Лайкнуть"}

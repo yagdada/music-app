@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
@@ -32,7 +33,9 @@ export default function RootLayout({
     >
     <body className="min-h-full flex bg-background text-foreground">
     <PlayerProvider>
-      <Sidebar />
+      <Suspense fallback={<div className="w-64 shrink-0 border-r border-white/10 bg-neutral-900 md:w-64" />}>
+        <Sidebar />
+      </Suspense>
       <main className="flex min-h-screen min-w-0 flex-1 flex-col pb-60 pt-14 md:ml-64 md:pb-44 md:pt-0">
         <div className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 md:px-8 md:py-10 lg:px-12">
           {children}

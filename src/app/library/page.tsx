@@ -31,6 +31,7 @@ export default function LibraryPage() {
     const [artist, setArtist] = useState("");
     const [visibility, setVisibility] = useState<Visibility>("private");
     const [file, setFile] = useState<File | null>(null);
+    const [coverFile, setCoverFile] = useState<File | null>(null); // <-- НОВЫЙ СТЕЙТ
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -80,12 +81,9 @@ export default function LibraryPage() {
         }
 
         const rows = (data ?? []) as unknown as { tracks: FeedTrack | null }[];
-
-        // Если доступ к песне закрыли, база вернёт null — такие пропускаем
         setLiked(rows.map((r) => r.tracks).filter((t): t is FeedTrack => !!t));
     }
 
-    // Убрал лайк — песня сразу пропадает из вкладки
     const likedVisible = liked.filter((t) => likedIds.has(t.id));
 
     function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -129,6 +127,7 @@ export default function LibraryPage() {
         setUploading(true);
         setMessage("");
 
+        // 1. Загружаем аудиофайл
         const extension = file.name.split(".").pop()?.toLowerCase() || "mp3";
         const filePath = `${userId}/${crypto.randomUUID()}.${extension}`;
 
@@ -142,11 +141,29 @@ export default function LibraryPage() {
             return;
         }
 
+        // 2. Загружаем обложку (если выбрана)
+        let coverUrl = null;
+        if (coverFile) {
+            const coverExt = coverFile.name.split(".").pop()?.toLowerCase() || "jpg";
+            const coverPath = `${userId}/${crypto.randomUUID()}.${coverExt}`;
+
+            const { error: coverError } = await supabase.storage
+                .from("covers")
+                .upload(coverPath, coverFile);
+
+            if (!coverError) {
+                const { data: publicUrl } = supabase.storage.from("covers").getPublicUrl(coverPath);
+                coverUrl = publicUrl.publicUrl;
+            }
+        }
+
+        // 3. Сохраняем в базу
         const { error: insertError } = await supabase.from("tracks").insert({
             title: cleanTitle,
             artist: artist.trim() || null,
             file_path: filePath,
             visibility,
+            cover_url: coverUrl, // <-- ПЕРЕДАЕМ ССЫЛКУ НА ОБЛОЖКУ
         });
 
         if (insertError) {
@@ -160,6 +177,7 @@ export default function LibraryPage() {
         setArtist("");
         setVisibility("private");
         setFile(null);
+        setCoverFile(null); // Очищаем картинку
         if (fileInputRef.current) fileInputRef.current.value = "";
 
         await loadUploaded(userId);
@@ -274,6 +292,18 @@ export default function LibraryPage() {
                                 className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-xl file:border-0 file:bg-purple-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-purple-500"
                             />
 
+                            {/* --- НОВОЕ ПОЛЕ ДЛЯ ОБЛОЖКИ --- */}
+                            <div>
+                                <label className="mb-2 block text-sm text-neutral-400">Обложка (картинка)</label>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
+                                    className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-800 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-neutral-700"
+                                />
+                            </div>
+                            {/* ------------------------------- */}
+
                             <input
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
@@ -329,17 +359,39 @@ export default function LibraryPage() {
                                     }`}
                                 >
                                     <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="truncate font-semibold">
-                                                {isCurrent ? "🎧 " : ""}
-                                                {track.title}
-                                            </p>
-                                            <p className="truncate text-sm text-neutral-400">
-                                                {track.artist || "Неизвестный исполнитель"}
-                                            </p>
+                                        {/* --- ДОБАВИЛИ ОБЛОЖКУ В СПИСОК --- */}
+                                        <div className="flex min-w-0 items-center gap-3">
+                                            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/5">
+                                                {track.cover_url ? (
+                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                    <img src={track.cover_url} alt="cover" className="h-full w-full object-cover" />
+                                                ) : (
+                                                    <span className="text-xl text-neutral-600">♫</span>
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="truncate font-semibold">
+                                                    {isCurrent ? "🎧 " : ""}
+                                                    {track.title}
+                                                </p>
+                                                <p className="truncate text-sm text-neutral-400">
+                                                    {track.artist || "Неизвестный исполнитель"}
+                                                </p>
+                                            </div>
                                         </div>
+                                        {/* ---------------------------------- */}
 
                                         <div className="flex shrink-0 gap-2">
+                                            <button
+                                                onClick={() => toggleLike(track.id)}
+                                                aria-label={likedIds.has(track.id) ? "Убрать лайк" : "Лайкнуть"}
+                                                className={`rounded-xl border border-white/10 px-4 py-2 text-lg leading-none hover:bg-neutral-800 ${
+                                                    likedIds.has(track.id) ? "text-red-500" : "text-neutral-400"
+                                                }`}
+                                            >
+                                                {likedIds.has(track.id) ? "♥" : "♡"}
+                                            </button>
+
                                             <button
                                                 onClick={() => playUploaded(i)}
                                                 aria-label="Слушать"

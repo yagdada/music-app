@@ -15,6 +15,7 @@ export type PlayerTrack = {
     title: string;
     artist: string | null;
     file_path: string;
+    cover_url?: string | null;
     owner_name?: string;
 };
 
@@ -148,9 +149,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                             {i === index ? "▶ " : `${i + 1}. `}
                                             {t.title}
                                             <span className="text-neutral-400">
-                        {" "}
+                                                {" "}
                                                 · {t.artist || "Неизвестный исполнитель"}
-                      </span>
+                                            </span>
                                         </button>
 
                                         {i !== index && (
@@ -168,60 +169,72 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                         </div>
                     )}
 
-                    <div className="mx-auto max-w-2xl p-3">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold">
-                                    {current.title}
-                                </p>
-                                <p className="truncate text-xs text-neutral-400">
-                                    {current.artist || "Неизвестный исполнитель"}
-                                    {current.owner_name ? ` · ${current.owner_name}` : ""}
-                                </p>
-                            </div>
-
-                            <div className="flex shrink-0 items-center gap-1">
-                                <button
-                                    onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                                    disabled={index === 0}
-                                    aria-label="Предыдущая"
-                                    className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
-                                >
-                                    ⏮
-                                </button>
-                                <button
-                                    onClick={handleEnded}
-                                    disabled={index >= queue.length - 1}
-                                    aria-label="Следующая"
-                                    className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
-                                >
-                                    ⏭
-                                </button>
-                                <button
-                                    onClick={() => setShowQueue((s) => !s)}
-                                    className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-neutral-800"
-                                >
-                                    ☰ {queue.length}
-                                </button>
-                            </div>
+                    <div className="mx-auto flex max-w-2xl items-center gap-4 p-3">
+                        {/* Обложка в плеере */}
+                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/10">
+                            {current.cover_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={current.cover_url} alt="cover" className="h-full w-full object-cover" />
+                            ) : (
+                                <span className="text-2xl text-neutral-600">♫</span>
+                            )}
                         </div>
 
-                        {hasError ? (
-                            <p className="text-sm text-red-400">
-                                Не удалось загрузить песню.
-                            </p>
-                        ) : url ? (
-                            <audio
-                                key={current.id}
-                                controls
-                                autoPlay
-                                src={url}
-                                onEnded={handleEnded}
-                                className="w-full"
-                            />
-                        ) : (
-                            <p className="text-sm text-neutral-400">Загружаем...</p>
-                        )}
+                        <div className="min-w-0 flex-1">
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">
+                                        {current.title}
+                                    </p>
+                                    <p className="truncate text-xs text-neutral-400">
+                                        {current.artist || "Неизвестный исполнитель"}
+                                        {current.owner_name ? ` · ${current.owner_name}` : ""}
+                                    </p>
+                                </div>
+
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                        onClick={() => setIndex((i) => Math.max(0, i - 1))}
+                                        disabled={index === 0}
+                                        aria-label="Предыдущая"
+                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
+                                    >
+                                        ⏮
+                                    </button>
+                                    <button
+                                        onClick={handleEnded}
+                                        disabled={index >= queue.length - 1}
+                                        aria-label="Следующая"
+                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
+                                    >
+                                        ⏭
+                                    </button>
+                                    <button
+                                        onClick={() => setShowQueue((s) => !s)}
+                                        className="rounded-lg border border-white/10 px-3 py-1.5 text-sm hover:bg-neutral-800"
+                                    >
+                                        ☰ {queue.length}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {hasError ? (
+                                <p className="text-sm text-red-400">
+                                    Не удалось загрузить песню.
+                                </p>
+                            ) : url ? (
+                                <audio
+                                    key={current.id}
+                                    controls
+                                    autoPlay
+                                    src={url}
+                                    onEnded={handleEnded}
+                                    className="w-full h-10"
+                                />
+                            ) : (
+                                <p className="text-sm text-neutral-400">Загружаем...</p>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}
