@@ -6,9 +6,10 @@ export type FeedTrack = {
     title: string;
     artist: string | null;
     file_path: string;
+    cover_url: string | null;
+    visibility: "private" | "friends";
     created_at: string | null;
-    visibility?: "private" | "friends";
-    profiles?: { username: string; avatar_url: string | null } | null;
+    profiles: { username: string; avatar_url: string | null } | null;
 };
 
 export const TRACK_SELECT =
