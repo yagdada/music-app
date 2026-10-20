@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { usePlayer } from "@/components/PlayerProvider";
-import { toPlayerTrack } from "@/lib/tracks";
+import { toPlayerTrack, type FeedTrack } from "@/lib/tracks";
 import Link from "next/link";
 
 type Profile = {
@@ -238,7 +238,7 @@ export default function FriendsPage() {
 
     function playFriendTracks(startIndex: number) {
         playQueue(
-            friendTracks.map((t) => toPlayerTrack(t as any, userId)),
+            friendTracks.map((t) => toPlayerTrack(t as FeedTrack, userId)),
             startIndex
         );
     }
@@ -523,7 +523,7 @@ export default function FriendsPage() {
                                                     ▶
                                                 </button>
                                                 <button
-                                                    onClick={() => addToQueue(toPlayerTrack(t as any, userId))}
+                                                    onClick={() => addToQueue(toPlayerTrack(t as FeedTrack, userId))}
                                                     disabled={queued}
                                                     className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
                                                 >
