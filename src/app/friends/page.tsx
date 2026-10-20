@@ -19,18 +19,6 @@ type Friendship = {
     status: "pending" | "accepted";
 };
 
-type FriendTrack = {
-    id: string;
-    owner_id: string;
-    title: string;
-    artist: string | null;
-    file_path: string;
-    cover_url?: string | null;
-    visibility?: "private" | "friends";
-    created_at?: string;
-    profiles?: { username: string; avatar_url: string | null } | null;
-};
-
 function Avatar({ profile }: { profile?: Profile }) {
     if (profile?.avatar_url) {
         return (
@@ -60,7 +48,7 @@ export default function FriendsPage() {
 
     const [friendships, setFriendships] = useState<Friendship[]>([]);
     const [profiles, setProfiles] = useState<Record<string, Profile>>({});
-    const [friendTracks, setFriendTracks] = useState<FriendTrack[]>([]);
+    const [friendTracks, setFriendTracks] = useState<FeedTrack[]>([]);
 
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<Profile[]>([]);
@@ -140,7 +128,7 @@ export default function FriendsPage() {
             .eq("visibility", "friends")
             .order("created_at", { ascending: false });
 
-        setFriendTracks((trackData ?? []) as FriendTrack[]);
+        setFriendTracks((trackData ?? []) as FeedTrack[]);
     }
 
     function otherId(f: Friendship) {
@@ -238,7 +226,7 @@ export default function FriendsPage() {
 
     function playFriendTracks(startIndex: number) {
         playQueue(
-            friendTracks.map((t) => toPlayerTrack(t as FeedTrack, userId)),
+            friendTracks.map((t) => toPlayerTrack(t, userId)),
             startIndex
         );
     }
@@ -523,7 +511,7 @@ export default function FriendsPage() {
                                                     ▶
                                                 </button>
                                                 <button
-                                                    onClick={() => addToQueue(toPlayerTrack(t as FeedTrack, userId))}
+                                                    onClick={() => addToQueue(toPlayerTrack(t, userId))}
                                                     disabled={queued}
                                                     className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
                                                 >
