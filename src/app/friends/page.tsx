@@ -25,7 +25,7 @@ type FriendTrack = {
     title: string;
     artist: string | null;
     file_path: string;
-    // Добавь эти две строчки:
+    cover_url?: string | null;
     visibility?: "private" | "friends";
     created_at?: string;
     profiles?: { username: string; avatar_url: string | null } | null;
@@ -135,7 +135,7 @@ export default function FriendsPage() {
         // База сама отдаст только треки с доступом «Друзья»
         const { data: trackData } = await supabase
             .from("tracks")
-            .select("id, owner_id, title, artist, file_path")
+            .select("id, owner_id, title, artist, file_path, cover_url") // <--- ДОБАВИЛИ cover_url
             .in("owner_id", friendIds)
             .eq("visibility", "friends")
             .order("created_at", { ascending: false });
@@ -238,7 +238,7 @@ export default function FriendsPage() {
 
     function playFriendTracks(startIndex: number) {
         playQueue(
-            friendTracks.map((t) => toPlayerTrack(t, userId)),
+            friendTracks.map((t) => toPlayerTrack(t as any, userId)),
             startIndex
         );
     }
@@ -491,16 +491,30 @@ export default function FriendsPage() {
                                 return (
                                     <li key={t.id} className={`rounded-xl bg-neutral-800 p-4 ${isCurrent ? 'border border-purple-500/60' : ''}`}>
                                         <div className="flex items-center justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <p className="truncate font-semibold">
-                                                    {isCurrent ? "🎧 " : ""}
-                                                    {t.title}
-                                                </p>
-                                                <p className="truncate text-sm text-neutral-400">
-                                                    {t.artist || "Неизвестный исполнитель"} ·{" "}
-                                                    {profiles[t.owner_id]?.username ?? "Друг"}
-                                                </p>
+
+                                            {/* --- БЛОК С ОБЛОЖКОЙ ДЛЯ ДРУЗЕЙ --- */}
+                                            <div className="flex min-w-0 items-center gap-3">
+                                                <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-900 flex items-center justify-center border border-white/5">
+                                                    {t.cover_url ? (
+                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                        <img src={t.cover_url} alt="cover" className="h-full w-full object-cover" />
+                                                    ) : (
+                                                        <span className="text-xl text-neutral-600">♫</span>
+                                                    )}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="truncate font-semibold">
+                                                        {isCurrent ? "🎧 " : ""}
+                                                        {t.title}
+                                                    </p>
+                                                    <p className="truncate text-sm text-neutral-400">
+                                                        {t.artist || "Неизвестный исполнитель"} ·{" "}
+                                                        {profiles[t.owner_id]?.username ?? "Друг"}
+                                                    </p>
+                                                </div>
                                             </div>
+                                            {/* ---------------------------------- */}
+
                                             <div className="flex shrink-0 gap-2">
                                                 <button
                                                     onClick={() => playFriendTracks(i)}
@@ -509,7 +523,7 @@ export default function FriendsPage() {
                                                     ▶
                                                 </button>
                                                 <button
-                                                    onClick={() => addToQueue(toPlayerTrack(t, userId))}
+                                                    onClick={() => addToQueue(toPlayerTrack(t as any, userId))}
                                                     disabled={queued}
                                                     className="rounded-xl border border-white/10 px-4 py-2 text-sm hover:bg-neutral-800 disabled:opacity-50"
                                                 >
