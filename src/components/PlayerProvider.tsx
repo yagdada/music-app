@@ -37,6 +37,14 @@ export function usePlayer() {
     return ctx;
 }
 
+// Функция для форматирования времени (например, 185 -> "3:05")
+function formatTime(seconds: number) {
+    if (isNaN(seconds) || seconds === Infinity) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+}
+
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const supabase = useMemo(() => createClient(), []);
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -52,13 +60,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const [expanded, setExpanded] = useState(false);
     const [isShuffled, setIsShuffled] = useState(false);
 
+    // СОСТОЯНИЯ ДЛЯ ВРЕМЕНИ
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+
     const current = queue[index] ?? null;
     const currentPath = current?.file_path ?? null;
 
     const url = signed && signed.path === currentPath ? signed.url : null;
     const hasError = failedPath !== null && failedPath === currentPath;
 
-    // 1. Получаем ссылку на аудио
     useEffect(() => {
         if (!currentPath) return;
 
@@ -83,7 +94,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         };
     }, [currentPath, supabase]);
 
-    // 2. Синхронизация Play/Pause. Добавлен url, чтобы play() срабатывал после загрузки ссылки
     useEffect(() => {
         if (audioRef.current) {
             if (isPlaying) {
@@ -146,6 +156,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
             }
         }
         setIsShuffled(!isShuffled);
+    }
+
+    // Обработка перемотки ползунком
+    function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
+        const time = Number(e.target.value);
+        setCurrentTime(time);
+        if (audioRef.current) {
+            audioRef.current.currentTime = time;
+        }
     }
 
     const value = useMemo(
@@ -288,31 +307,35 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                         onEnded={handleEnded}
                                         onPlay={() => setIsPlaying(true)}
                                         onPause={() => setIsPlaying(false)}
+                                        // СЛУШАТЕЛИ ДЛЯ ОБНОВЛЕНИЯ ВРЕМЕНИ
+                                        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                                        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
                                         className="hidden"
                                     />
 
                                     <div className="flex items-center gap-3 mt-1">
-                                        <button
-                                            onClick={togglePlay}
-                                            className="rounded-full bg-purple-600 h-8 w-8 flex items-center justify-center hover:bg-purple-500 transition shrink-0"
-                                        >
-                                            {isPlaying ? "⏸" : "▶"}
-                                        </button>
-
+                                        <span className="text-[10px] text-neutral-400 w-8 text-right tabular-nums">
+                                            {formatTime(currentTime)}
+                                        </span>
                                         <div className="flex-1">
                                             <input
                                                 type="range"
                                                 min="0"
-                                                max="100"
-                                                defaultValue="0"
-                                                onChange={(e) => {
-                                                    if (audioRef.current && audioRef.current.duration) {
-                                                        audioRef.current.currentTime = (Number(e.target.value) / 100) * audioRef.current.duration;
-                                                    }
-                                                }}
+                                                max={duration || 100}
+                                                value={currentTime}
+                                                onChange={handleSeek}
                                                 className="w-full accent-purple-500 h-1 cursor-pointer"
                                             />
                                         </div>
+                                        <span className="text-[10px] text-neutral-400 w-8 tabular-nums">
+                                            {formatTime(duration)}
+                                        </span>
+                                        <button
+                                            onClick={togglePlay}
+                                            className="rounded-full bg-purple-600 h-8 w-8 flex items-center justify-center hover:bg-purple-500 transition shrink-0 ml-2"
+                                        >
+                                            {isPlaying ? "⏸" : "▶"}
+                                        </button>
                                     </div>
                                 </>
                             ) : (
@@ -323,6 +346,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
+            {/* --- ПОЛНОЭКРАННЫЙ РЕЖИМ --- */}
             {expanded && current && (
                 <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-neutral-950/98 p-6 text-white backdrop-blur-2xl">
                     <button
@@ -357,34 +381,62 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 </p>
                             </div>
 
-                            <div className="mt-6 w-full flex items-center gap-4">
-                                <button
-                                    onClick={toggleShuffle}
-                                    className={`rounded-full p-3 transition ${
-                                        isShuffled ? "bg-purple-600/20 text-purple-500" : "text-neutral-400 hover:bg-white/5"
-                                    }`}
-                                >
-                                    🔀
-                                </button>
+                            {/* Управление на весь экран */}
+                            <div className="mt-6 w-full flex flex-col gap-2">
+                                {/* Время и ползунок */}
+                                <div className="flex items-center gap-3 w-full">
+                                    <span className="text-xs text-neutral-400 tabular-nums w-10 text-right">
+                                        {formatTime(currentTime)}
+                                    </span>
+                                    <input
+                                        type="range"
+                                        min="0"
+                                        max={duration || 100}
+                                        value={currentTime}
+                                        onChange={handleSeek}
+                                        className="w-full accent-purple-500 h-1 cursor-pointer"
+                                    />
+                                    <span className="text-xs text-neutral-400 tabular-nums w-10">
+                                        {formatTime(duration)}
+                                    </span>
+                                </div>
 
-                                <button
-                                    onClick={togglePlay}
-                                    className="rounded-full bg-purple-600 h-14 w-14 flex items-center justify-center text-xl hover:bg-purple-500 transition shrink-0 shadow-lg shadow-purple-500/20"
-                                >
-                                    {isPlaying ? "⏸" : "▶"}
-                                </button>
-                                <input
-                                    type="range"
-                                    min="0"
-                                    max="100"
-                                    defaultValue="0"
-                                    onChange={(e) => {
-                                        if (audioRef.current && audioRef.current.duration) {
-                                            audioRef.current.currentTime = (Number(e.target.value) / 100) * audioRef.current.duration;
-                                        }
-                                    }}
-                                    className="w-full accent-purple-500 h-1 cursor-pointer"
-                                />
+                                {/* Кнопки управления */}
+                                <div className="flex items-center justify-center gap-6 mt-4">
+                                    <button
+                                        onClick={toggleShuffle}
+                                        className={`rounded-full p-3 transition ${
+                                            isShuffled ? "text-purple-500" : "text-neutral-400 hover:text-white"
+                                        }`}
+                                    >
+                                        🔀
+                                    </button>
+
+                                    <button
+                                        onClick={() => setIndex((i) => Math.max(0, i - 1))}
+                                        disabled={index === 0}
+                                        className="text-neutral-400 hover:text-white disabled:opacity-30 transition"
+                                    >
+                                        ⏮
+                                    </button>
+
+                                    <button
+                                        onClick={togglePlay}
+                                        className="rounded-full bg-purple-600 h-16 w-16 flex items-center justify-center text-2xl hover:bg-purple-500 transition shrink-0 shadow-lg shadow-purple-500/20"
+                                    >
+                                        {isPlaying ? "⏸" : "▶"}
+                                    </button>
+
+                                    <button
+                                        onClick={handleEnded}
+                                        disabled={index >= queue.length - 1}
+                                        className="text-neutral-400 hover:text-white disabled:opacity-30 transition"
+                                    >
+                                        ⏭
+                                    </button>
+
+                                    <div className="w-12"></div> {/* Пустое место для симметрии */}
+                                </div>
                             </div>
                         </div>
                     </div>
