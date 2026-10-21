@@ -37,7 +37,6 @@ export function usePlayer() {
     return ctx;
 }
 
-// Функция для форматирования времени (например, 185 -> "3:05")
 function formatTime(seconds: number) {
     if (isNaN(seconds) || seconds === Infinity) return "0:00";
     const mins = Math.floor(seconds / 60);
@@ -60,7 +59,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const [expanded, setExpanded] = useState(false);
     const [isShuffled, setIsShuffled] = useState(false);
 
-    // СОСТОЯНИЯ ДЛЯ ВРЕМЕНИ
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
 
@@ -134,8 +132,20 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setIsPlaying(false);
     }
 
-    function handleEnded() {
-        setIndex((i) => (i + 1 < queue.length ? i + 1 : i));
+    function handleNext() {
+        // Если это последний трек, переходим на первый (циклично)
+        setIndex((i) => (i + 1 < queue.length ? i + 1 : 0));
+        setIsPlaying(true);
+    }
+
+    function handlePrev() {
+        // Если трек только начался (менее 3 секунд), переключаем на предыдущий. Иначе начинаем заново.
+        if (audioRef.current && audioRef.current.currentTime > 3) {
+            audioRef.current.currentTime = 0;
+            return;
+        }
+        setIndex((i) => (i - 1 >= 0 ? i - 1 : queue.length - 1));
+        setIsPlaying(true);
     }
 
     function togglePlay() {
@@ -154,11 +164,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 const newIndex = shuffled.findIndex((t) => t.id === current.id);
                 setIndex(newIndex >= 0 ? newIndex : 0);
             }
+        } else {
+            // Если выключаем шаффл, просто оставляем текущий порядок, но сбрасываем флаг
         }
         setIsShuffled(!isShuffled);
     }
 
-    // Обработка перемотки ползунком
     function handleSeek(e: React.ChangeEvent<HTMLInputElement>) {
         const time = Number(e.target.value);
         setCurrentTime(time);
@@ -257,24 +268,22 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                         onClick={toggleShuffle}
                                         aria-label="Перемешать"
                                         className={`rounded-lg px-3 py-1.5 hover:bg-neutral-800 transition ${
-                                            isShuffled ? "text-purple-500" : "text-neutral-400"
+                                            isShuffled ? "text-purple-500 bg-purple-500/10" : "text-neutral-400"
                                         }`}
                                     >
                                         🔀
                                     </button>
                                     <button
-                                        onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                                        disabled={index === 0}
+                                        onClick={handlePrev}
                                         aria-label="Предыдущая"
-                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
+                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800"
                                     >
                                         ⏮
                                     </button>
                                     <button
-                                        onClick={handleEnded}
-                                        disabled={index >= queue.length - 1}
+                                        onClick={handleNext}
                                         aria-label="Следующая"
-                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800 disabled:opacity-30"
+                                        className="rounded-lg px-3 py-1.5 hover:bg-neutral-800"
                                     >
                                         ⏭
                                     </button>
@@ -304,10 +313,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                         ref={audioRef}
                                         key={current.id}
                                         src={url}
-                                        onEnded={handleEnded}
+                                        onEnded={handleNext}
                                         onPlay={() => setIsPlaying(true)}
                                         onPause={() => setIsPlaying(false)}
-                                        // СЛУШАТЕЛИ ДЛЯ ОБНОВЛЕНИЯ ВРЕМЕНИ
                                         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
                                         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
                                         className="hidden"
@@ -346,7 +354,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
-            {/* --- ПОЛНОЭКРАННЫЙ РЕЖИМ --- */}
             {expanded && current && (
                 <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-neutral-950/98 p-6 text-white backdrop-blur-2xl">
                     <button
@@ -381,9 +388,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 </p>
                             </div>
 
-                            {/* Управление на весь экран */}
                             <div className="mt-6 w-full flex flex-col gap-2">
-                                {/* Время и ползунок */}
                                 <div className="flex items-center gap-3 w-full">
                                     <span className="text-xs text-neutral-400 tabular-nums w-10 text-right">
                                         {formatTime(currentTime)}
@@ -401,21 +406,19 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                     </span>
                                 </div>
 
-                                {/* Кнопки управления */}
                                 <div className="flex items-center justify-center gap-6 mt-4">
                                     <button
                                         onClick={toggleShuffle}
                                         className={`rounded-full p-3 transition ${
-                                            isShuffled ? "text-purple-500" : "text-neutral-400 hover:text-white"
+                                            isShuffled ? "bg-purple-600/20 text-purple-500" : "text-neutral-400 hover:text-white"
                                         }`}
                                     >
                                         🔀
                                     </button>
 
                                     <button
-                                        onClick={() => setIndex((i) => Math.max(0, i - 1))}
-                                        disabled={index === 0}
-                                        className="text-neutral-400 hover:text-white disabled:opacity-30 transition"
+                                        onClick={handlePrev}
+                                        className="text-neutral-400 hover:text-white transition"
                                     >
                                         ⏮
                                     </button>
@@ -428,14 +431,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                     </button>
 
                                     <button
-                                        onClick={handleEnded}
-                                        disabled={index >= queue.length - 1}
-                                        className="text-neutral-400 hover:text-white disabled:opacity-30 transition"
+                                        onClick={handleNext}
+                                        className="text-neutral-400 hover:text-white transition"
                                     >
                                         ⏭
                                     </button>
 
-                                    <div className="w-12"></div> {/* Пустое место для симметрии */}
+                                    <div className="w-12"></div>
                                 </div>
                             </div>
                         </div>
