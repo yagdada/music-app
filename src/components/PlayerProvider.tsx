@@ -50,7 +50,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const [showQueue, setShowQueue] = useState(false);
     const [isPlaying, setIsPlaying] = useState(false);
     const [expanded, setExpanded] = useState(false);
-    const [isShuffled, setIsShuffled] = useState(false); // <-- СОСТОЯНИЕ SHUFFLE
+    const [isShuffled, setIsShuffled] = useState(false);
 
     const current = queue[index] ?? null;
     const currentPath = current?.file_path ?? null;
@@ -58,6 +58,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const url = signed && signed.path === currentPath ? signed.url : null;
     const hasError = failedPath !== null && failedPath === currentPath;
 
+    // 1. Получаем ссылку на аудио
     useEffect(() => {
         if (!currentPath) return;
 
@@ -82,6 +83,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         };
     }, [currentPath, supabase]);
 
+    // 2. Синхронизация Play/Pause. Добавлен url, чтобы play() срабатывал после загрузки ссылки
     useEffect(() => {
         if (audioRef.current) {
             if (isPlaying) {
@@ -90,7 +92,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 audioRef.current.pause();
             }
         }
-    }, [isPlaying, current?.id]);
+    }, [isPlaying, current?.id, url]);
 
     const playQueue = useCallback((tracks: PlayerTrack[], startIndex = 0) => {
         if (tracks.length === 0) return;
@@ -130,17 +132,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setIsPlaying((prev) => !prev);
     }
 
-    // ФУНКЦИЯ ПЕРЕМЕШИВАНИЯ
     function toggleShuffle() {
         if (!isShuffled) {
-            // Перемешиваем копию очереди
             const shuffled = [...queue];
             for (let i = shuffled.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
                 [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
             }
             setQueue(shuffled);
-            // Находим новый индекс текущего трека, чтобы он не остановился
             if (current) {
                 const newIndex = shuffled.findIndex((t) => t.id === current.id);
                 setIndex(newIndex >= 0 ? newIndex : 0);
@@ -158,7 +157,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         <PlayerContext.Provider value={value}>
             {children}
 
-            {/* --- ОБЫЧНЫЙ ПЛЕЕР ВНИЗУ --- */}
             {current && (
                 <div className="fixed bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-neutral-900/95 text-white backdrop-blur md:bottom-0 md:left-64">
                     {showQueue && (
@@ -236,7 +234,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 </div>
 
                                 <div className="flex shrink-0 items-center gap-1">
-                                    {/* Кнопка Shuffle */}
                                     <button
                                         onClick={toggleShuffle}
                                         aria-label="Перемешать"
@@ -326,7 +323,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 </div>
             )}
 
-            {/* --- ПОЛНОЭКРАННЫЙ РЕЖИМ (EXPANDED VIEW) --- */}
             {expanded && current && (
                 <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-neutral-950/98 p-6 text-white backdrop-blur-2xl">
                     <button
@@ -362,7 +358,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                             </div>
 
                             <div className="mt-6 w-full flex items-center gap-4">
-                                {/* Кнопка Shuffle на весь экран */}
                                 <button
                                     onClick={toggleShuffle}
                                     className={`rounded-full p-3 transition ${
