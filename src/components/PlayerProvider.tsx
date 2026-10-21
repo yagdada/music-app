@@ -6,6 +6,7 @@ import {
     useContext,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -38,6 +39,7 @@ export function usePlayer() {
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const supabase = useMemo(() => createClient(), []);
+    const audioRef = useRef<HTMLAudioElement>(null);
 
     const [queue, setQueue] = useState<PlayerTrack[]>([]);
     const [index, setIndex] = useState(0);
@@ -46,6 +48,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     );
     const [failedPath, setFailedPath] = useState<string | null>(null);
     const [showQueue, setShowQueue] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [expanded, setExpanded] = useState(false);
+    const [isShuffled, setIsShuffled] = useState(false); // <-- СОСТОЯНИЕ SHUFFLE
 
     const current = queue[index] ?? null;
     const currentPath = current?.file_path ?? null;
@@ -77,10 +82,21 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         };
     }, [currentPath, supabase]);
 
+    useEffect(() => {
+        if (audioRef.current) {
+            if (isPlaying) {
+                audioRef.current.play().catch(() => setIsPlaying(false));
+            } else {
+                audioRef.current.pause();
+            }
+        }
+    }, [isPlaying, current?.id]);
+
     const playQueue = useCallback((tracks: PlayerTrack[], startIndex = 0) => {
         if (tracks.length === 0) return;
         setQueue(tracks);
         setIndex(startIndex);
+        setIsPlaying(true);
     }, []);
 
     const addToQueue = useCallback((track: PlayerTrack) => {
@@ -103,10 +119,34 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setQueue([]);
         setIndex(0);
         setShowQueue(false);
+        setIsPlaying(false);
     }
 
     function handleEnded() {
         setIndex((i) => (i + 1 < queue.length ? i + 1 : i));
+    }
+
+    function togglePlay() {
+        setIsPlaying((prev) => !prev);
+    }
+
+    // ФУНКЦИЯ ПЕРЕМЕШИВАНИЯ
+    function toggleShuffle() {
+        if (!isShuffled) {
+            // Перемешиваем копию очереди
+            const shuffled = [...queue];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            setQueue(shuffled);
+            // Находим новый индекс текущего трека, чтобы он не остановился
+            if (current) {
+                const newIndex = shuffled.findIndex((t) => t.id === current.id);
+                setIndex(newIndex >= 0 ? newIndex : 0);
+            }
+        }
+        setIsShuffled(!isShuffled);
     }
 
     const value = useMemo(
@@ -118,6 +158,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         <PlayerContext.Provider value={value}>
             {children}
 
+            {/* --- ОБЫЧНЫЙ ПЛЕЕР ВНИЗУ --- */}
             {current && (
                 <div className="fixed bottom-16 left-0 right-0 z-50 border-t border-white/10 bg-neutral-900/95 text-white backdrop-blur md:bottom-0 md:left-64">
                     {showQueue && (
@@ -143,7 +184,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                         }`}
                                     >
                                         <button
-                                            onClick={() => setIndex(i)}
+                                            onClick={() => { setIndex(i); setIsPlaying(true); }}
                                             className="min-w-0 flex-1 truncate text-left"
                                         >
                                             {i === index ? "▶ " : `${i + 1}. `}
@@ -170,8 +211,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                     )}
 
                     <div className="mx-auto flex max-w-2xl items-center gap-4 p-3">
-                        {/* Обложка в плеере */}
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/10">
+                        <div
+                            className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/10 cursor-pointer hover:opacity-80 transition"
+                            onClick={() => setExpanded(true)}
+                        >
                             {current.cover_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={current.cover_url} alt="cover" className="h-full w-full object-cover" />
@@ -182,7 +225,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
                         <div className="min-w-0 flex-1">
                             <div className="mb-2 flex items-center justify-between gap-3">
-                                <div className="min-w-0">
+                                <div className="min-w-0 cursor-pointer" onClick={() => setExpanded(true)}>
                                     <p className="truncate text-sm font-semibold">
                                         {current.title}
                                     </p>
@@ -193,6 +236,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 </div>
 
                                 <div className="flex shrink-0 items-center gap-1">
+                                    {/* Кнопка Shuffle */}
+                                    <button
+                                        onClick={toggleShuffle}
+                                        aria-label="Перемешать"
+                                        className={`rounded-lg px-3 py-1.5 hover:bg-neutral-800 transition ${
+                                            isShuffled ? "text-purple-500" : "text-neutral-400"
+                                        }`}
+                                    >
+                                        🔀
+                                    </button>
                                     <button
                                         onClick={() => setIndex((i) => Math.max(0, i - 1))}
                                         disabled={index === 0}
@@ -215,6 +268,13 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                     >
                                         ☰ {queue.length}
                                     </button>
+                                    <button
+                                        onClick={() => setExpanded(true)}
+                                        className="hidden sm:block rounded-lg px-3 py-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800"
+                                        title="Развернуть"
+                                    >
+                                        ⛶
+                                    </button>
                                 </div>
                             </div>
 
@@ -223,17 +283,114 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                     Не удалось загрузить песню.
                                 </p>
                             ) : url ? (
-                                <audio
-                                    key={current.id}
-                                    controls
-                                    autoPlay
-                                    src={url}
-                                    onEnded={handleEnded}
-                                    className="w-full h-10"
-                                />
+                                <>
+                                    <audio
+                                        ref={audioRef}
+                                        key={current.id}
+                                        src={url}
+                                        onEnded={handleEnded}
+                                        onPlay={() => setIsPlaying(true)}
+                                        onPause={() => setIsPlaying(false)}
+                                        className="hidden"
+                                    />
+
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <button
+                                            onClick={togglePlay}
+                                            className="rounded-full bg-purple-600 h-8 w-8 flex items-center justify-center hover:bg-purple-500 transition shrink-0"
+                                        >
+                                            {isPlaying ? "⏸" : "▶"}
+                                        </button>
+
+                                        <div className="flex-1">
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                defaultValue="0"
+                                                onChange={(e) => {
+                                                    if (audioRef.current && audioRef.current.duration) {
+                                                        audioRef.current.currentTime = (Number(e.target.value) / 100) * audioRef.current.duration;
+                                                    }
+                                                }}
+                                                className="w-full accent-purple-500 h-1 cursor-pointer"
+                                            />
+                                        </div>
+                                    </div>
+                                </>
                             ) : (
                                 <p className="text-sm text-neutral-400">Загружаем...</p>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- ПОЛНОЭКРАННЫЙ РЕЖИМ (EXPANDED VIEW) --- */}
+            {expanded && current && (
+                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-neutral-950/98 p-6 text-white backdrop-blur-2xl">
+                    <button
+                        onClick={() => setExpanded(false)}
+                        className="absolute right-6 top-6 rounded-full bg-neutral-800 p-3 text-neutral-400 hover:bg-neutral-700 hover:text-white transition"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    <div className="flex w-full max-w-5xl flex-col items-center gap-10 md:flex-row md:items-start md:gap-16">
+                        <div className="h-64 w-64 md:h-[400px] md:w-[400px] shrink-0 overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+                            {current.cover_url ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={current.cover_url} alt="cover" className="h-full w-full object-cover" />
+                            ) : (
+                                <div className="flex h-full w-full items-center justify-center bg-neutral-800 text-8xl text-neutral-600">
+                                    ♫
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex w-full min-w-0 flex-col items-center md:items-start h-[400px]">
+                            <h1 className="text-3xl md:text-5xl font-bold text-center md:text-left truncate w-full">{current.title}</h1>
+                            <p className="mt-3 text-lg text-neutral-400 text-center md:text-left truncate w-full">
+                                {current.artist || "Неизвестный исполнитель"}
+                                {current.owner_name ? ` · ${current.owner_name}` : ""}
+                            </p>
+
+                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 custom-scrollbar">
+                                <p className="text-center text-neutral-500 italic mt-20">
+                                    Текст песни скоро появится здесь...
+                                </p>
+                            </div>
+
+                            <div className="mt-6 w-full flex items-center gap-4">
+                                {/* Кнопка Shuffle на весь экран */}
+                                <button
+                                    onClick={toggleShuffle}
+                                    className={`rounded-full p-3 transition ${
+                                        isShuffled ? "bg-purple-600/20 text-purple-500" : "text-neutral-400 hover:bg-white/5"
+                                    }`}
+                                >
+                                    🔀
+                                </button>
+
+                                <button
+                                    onClick={togglePlay}
+                                    className="rounded-full bg-purple-600 h-14 w-14 flex items-center justify-center text-xl hover:bg-purple-500 transition shrink-0 shadow-lg shadow-purple-500/20"
+                                >
+                                    {isPlaying ? "⏸" : "▶"}
+                                </button>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    defaultValue="0"
+                                    onChange={(e) => {
+                                        if (audioRef.current && audioRef.current.duration) {
+                                            audioRef.current.currentTime = (Number(e.target.value) / 100) * audioRef.current.duration;
+                                        }
+                                    }}
+                                    className="w-full accent-purple-500 h-1 cursor-pointer"
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>
