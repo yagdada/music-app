@@ -31,7 +31,8 @@ export default function LibraryPage() {
     const [artist, setArtist] = useState("");
     const [visibility, setVisibility] = useState<Visibility>("private");
     const [file, setFile] = useState<File | null>(null);
-    const [coverFile, setCoverFile] = useState<File | null>(null); // <-- НОВЫЙ СТЕЙТ
+    const [coverFile, setCoverFile] = useState<File | null>(null);
+    const [lyrics, setLyrics] = useState(""); // <--- СТЕЙТ ДЛЯ ТЕКСТА
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -127,7 +128,7 @@ export default function LibraryPage() {
         setUploading(true);
         setMessage("");
 
-        // 1. Загружаем аудиофайл
+        // 1. Загружаем аудио
         const extension = file.name.split(".").pop()?.toLowerCase() || "mp3";
         const filePath = `${userId}/${crypto.randomUUID()}.${extension}`;
 
@@ -141,7 +142,7 @@ export default function LibraryPage() {
             return;
         }
 
-        // 2. Загружаем обложку (если выбрана)
+        // 2. Загружаем обложку
         let coverUrl = null;
         if (coverFile) {
             const coverExt = coverFile.name.split(".").pop()?.toLowerCase() || "jpg";
@@ -157,13 +158,14 @@ export default function LibraryPage() {
             }
         }
 
-        // 3. Сохраняем в базу
+        // 3. Сохраняем всё в базу
         const { error: insertError } = await supabase.from("tracks").insert({
             title: cleanTitle,
             artist: artist.trim() || null,
             file_path: filePath,
             visibility,
-            cover_url: coverUrl, // <-- ПЕРЕДАЕМ ССЫЛКУ НА ОБЛОЖКУ
+            cover_url: coverUrl,
+            lyrics: lyrics.trim() || null, // <--- СОХРАНЯЕМ ТЕКСТ
         });
 
         if (insertError) {
@@ -177,7 +179,8 @@ export default function LibraryPage() {
         setArtist("");
         setVisibility("private");
         setFile(null);
-        setCoverFile(null); // Очищаем картинку
+        setCoverFile(null);
+        setLyrics(""); // Очищаем поле текста
         if (fileInputRef.current) fileInputRef.current.value = "";
 
         await loadUploaded(userId);
@@ -292,7 +295,6 @@ export default function LibraryPage() {
                                 className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-xl file:border-0 file:bg-purple-600 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-purple-500"
                             />
 
-                            {/* --- НОВОЕ ПОЛЕ ДЛЯ ОБЛОЖКИ --- */}
                             <div>
                                 <label className="mb-2 block text-sm text-neutral-400">Обложка (картинка)</label>
                                 <input
@@ -302,7 +304,6 @@ export default function LibraryPage() {
                                     className="block w-full text-sm text-neutral-300 file:mr-4 file:rounded-xl file:border-0 file:bg-neutral-800 file:px-4 file:py-2 file:font-semibold file:text-white hover:file:bg-neutral-700"
                                 />
                             </div>
-                            {/* ------------------------------- */}
 
                             <input
                                 value={title}
@@ -319,6 +320,13 @@ export default function LibraryPage() {
                                 placeholder="Исполнитель (необязательно)"
                                 maxLength={100}
                                 className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500"
+                            />
+
+                            <textarea
+                                value={lyrics}
+                                onChange={(e) => setLyrics(e.target.value)}
+                                placeholder="Текст песни (необязательно)"
+                                className="w-full rounded-xl border border-white/10 bg-neutral-800 px-4 py-3 outline-none focus:border-purple-500 min-h-[120px]"
                             />
 
                             <select
@@ -359,7 +367,6 @@ export default function LibraryPage() {
                                     }`}
                                 >
                                     <div className="flex items-center justify-between gap-3">
-                                        {/* --- ДОБАВИЛИ ОБЛОЖКУ В СПИСОК --- */}
                                         <div className="flex min-w-0 items-center gap-3">
                                             <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg bg-neutral-800 flex items-center justify-center border border-white/5">
                                                 {track.cover_url ? (
@@ -379,7 +386,6 @@ export default function LibraryPage() {
                                                 </p>
                                             </div>
                                         </div>
-                                        {/* ---------------------------------- */}
 
                                         <div className="flex shrink-0 gap-2">
                                             <button

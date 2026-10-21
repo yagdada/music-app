@@ -17,6 +17,7 @@ export type PlayerTrack = {
     artist: string | null;
     file_path: string;
     cover_url?: string | null;
+    lyrics?: string | null;
     owner_name?: string;
 };
 
@@ -133,13 +134,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
 
     function handleNext() {
-        // Если это последний трек, переходим на первый (циклично)
         setIndex((i) => (i + 1 < queue.length ? i + 1 : 0));
         setIsPlaying(true);
     }
 
     function handlePrev() {
-        // Если трек только начался (менее 3 секунд), переключаем на предыдущий. Иначе начинаем заново.
         if (audioRef.current && audioRef.current.currentTime > 3) {
             audioRef.current.currentTime = 0;
             return;
@@ -164,8 +163,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                 const newIndex = shuffled.findIndex((t) => t.id === current.id);
                 setIndex(newIndex >= 0 ? newIndex : 0);
             }
-        } else {
-            // Если выключаем шаффл, просто оставляем текущий порядок, но сбрасываем флаг
         }
         setIsShuffled(!isShuffled);
     }
@@ -382,10 +379,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 {current.owner_name ? ` · ${current.owner_name}` : ""}
                             </p>
 
+                            {/* ВЫВОД ТЕКСТА ПЕСНИ */}
                             <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 custom-scrollbar">
-                                <p className="text-center text-neutral-500 italic mt-20">
-                                    Текст песни скоро появится здесь...
-                                </p>
+                                {current.lyrics ? (
+                                    <pre className="whitespace-pre-wrap font-sans text-neutral-300 text-sm md:text-base leading-relaxed text-center">
+                                        {current.lyrics}
+                                    </pre>
+                                ) : (
+                                    <p className="text-center text-neutral-500 italic mt-20">
+                                        Текст песни не добавлен.
+                                    </p>
+                                )}
                             </div>
 
                             <div className="mt-6 w-full flex flex-col gap-2">
