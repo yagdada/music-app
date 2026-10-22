@@ -413,6 +413,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <div className="flex w-full min-w-0 flex-col items-center md:items-start h-[400px]">
+                            {/* НАЗВАНИЕ И ИСПОЛНИТЕЛЬ В ПОЛНОЭКРАННОМ РЕЖИМЕ */}
                             <h1 className="text-3xl md:text-5xl font-bold text-center md:text-left truncate w-full">{current.title}</h1>
                             <p className="mt-3 text-lg text-neutral-400 text-center md:text-left truncate w-full">
                                 {current.artist || "Неизвестный исполнитель"}
