@@ -32,7 +32,7 @@ export default function LibraryPage() {
     const [visibility, setVisibility] = useState<Visibility>("private");
     const [file, setFile] = useState<File | null>(null);
     const [coverFile, setCoverFile] = useState<File | null>(null);
-    const [lyrics, setLyrics] = useState(""); // <--- СТЕЙТ ДЛЯ ТЕКСТА
+    const [lyrics, setLyrics] = useState("");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -126,9 +126,20 @@ export default function LibraryPage() {
         }
 
         setUploading(true);
-        setMessage("");
+        setMessage("Анализируем файл и ищем текст...");
 
-        // 1. Загружаем аудио
+        // 1. Получаем длительность аудио прямо в браузере
+        const duration = await new Promise<number>((resolve) => {
+            const audio = new Audio();
+            audio.src = URL.createObjectURL(file);
+            audio.onloadedmetadata = () => {
+                resolve(Math.round(audio.duration));
+                URL.revokeObjectURL(audio.src);
+            };
+            audio.onerror = () => resolve(0);
+        });
+
+        // 2. Загружаем аудиофайл в Storage
         const extension = file.name.split(".").pop()?.toLowerCase() || "mp3";
         const filePath = `${userId}/${crypto.randomUUID()}.${extension}`;
 
@@ -142,30 +153,38 @@ export default function LibraryPage() {
             return;
         }
 
-        // 2. Загружаем обложку
+        // 3. Загружаем обложку (если есть)
         let coverUrl = null;
         if (coverFile) {
             const coverExt = coverFile.name.split(".").pop()?.toLowerCase() || "jpg";
             const coverPath = `${userId}/${crypto.randomUUID()}.${coverExt}`;
-
-            const { error: coverError } = await supabase.storage
-                .from("covers")
-                .upload(coverPath, coverFile);
-
+            const { error: coverError } = await supabase.storage.from("covers").upload(coverPath, coverFile);
             if (!coverError) {
                 const { data: publicUrl } = supabase.storage.from("covers").getPublicUrl(coverPath);
                 coverUrl = publicUrl.publicUrl;
             }
         }
 
-        // 3. Сохраняем всё в базу
+        // 4. Ищем синхронизированный текст на LRCLIB
+        let syncedLyrics = null;
+        try {
+            const lrcRes = await fetch(`/api/lyrics?title=${encodeURIComponent(cleanTitle)}&artist=${encodeURIComponent(artist.trim())}&duration=${duration}`);
+            const lrcData = await lrcRes.json();
+            syncedLyrics = lrcData.syncedLyrics;
+        } catch (e) {
+            console.log("Не удалось найти текст на LRCLIB");
+        }
+
+        // 5. Сохраняем трек в базу
         const { error: insertError } = await supabase.from("tracks").insert({
             title: cleanTitle,
             artist: artist.trim() || null,
             file_path: filePath,
             visibility,
             cover_url: coverUrl,
-            lyrics: lyrics.trim() || null, // <--- СОХРАНЯЕМ ТЕКСТ
+            lyrics: lyrics.trim() || null,
+            duration: duration > 0 ? duration : null,
+            synced_lyrics: syncedLyrics
         });
 
         if (insertError) {
@@ -180,7 +199,7 @@ export default function LibraryPage() {
         setVisibility("private");
         setFile(null);
         setCoverFile(null);
-        setLyrics(""); // Очищаем поле текста
+        setLyrics("");
         if (fileInputRef.current) fileInputRef.current.value = "";
 
         await loadUploaded(userId);

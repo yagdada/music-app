@@ -18,6 +18,8 @@ export type PlayerTrack = {
     file_path: string;
     cover_url?: string | null;
     lyrics?: string | null;
+    duration?: number | null; // <--- ДОБАВИЛИ
+    synced_lyrics?: string | null; // <--- ДОБАВИЛИ
     owner_name?: string;
 };
 
@@ -45,6 +47,26 @@ function formatTime(seconds: number) {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
 }
 
+// Парсер LRC формата (текст с таймкодами)
+function parseLrc(lrc: string) {
+    const lines = lrc.split("\n");
+    const result: { time: number; text: string }[] = [];
+
+    for (const line of lines) {
+        const match = line.match(/\[(\d+):(\d+\.\d+)\](.*)/);
+        if (match) {
+            const minutes = parseInt(match[1]);
+            const seconds = parseFloat(match[2]);
+            const text = match[3].trim();
+            if (text) {
+                result.push({ time: minutes * 60 + seconds, text });
+            }
+        }
+    }
+    // Сортируем на всякий случай по времени
+    return result.sort((a, b) => a.time - b.time);
+}
+
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
     const supabase = useMemo(() => createClient(), []);
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -68,6 +90,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
     const url = signed && signed.path === currentPath ? signed.url : null;
     const hasError = failedPath !== null && failedPath === currentPath;
+
+    // Парсим караоке-текст
+    const parsedLyrics = useMemo(() => {
+        if (!current?.synced_lyrics) return [];
+        return parseLrc(current.synced_lyrics);
+    }, [current?.synced_lyrics]);
+
+    // Находим текущую активную строчку
+    const currentLine = useMemo(() => {
+        if (!parsedLyrics.length) return null;
+        for (let i = parsedLyrics.length - 1; i >= 0; i--) {
+            if (currentTime >= parsedLyrics[i].time) {
+                return parsedLyrics[i];
+            }
+        }
+        return parsedLyrics[0];
+    }, [parsedLyrics, currentTime]);
+
+    // Индекс следующей строчки для красивого отображения
+    const currentLineIndex = currentLine ? parsedLyrics.indexOf(currentLine) : -1;
 
     useEffect(() => {
         if (!currentPath) return;
@@ -379,15 +421,26 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 {current.owner_name ? ` · ${current.owner_name}` : ""}
                             </p>
 
-                            {/* ВЫВОД ТЕКСТА ПЕСНИ */}
-                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 custom-scrollbar">
-                                {current.lyrics ? (
+                            {/* ВЫВОД ТЕКСТА ПЕСНИ (КАРАОКЕ) */}
+                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 custom-scrollbar flex flex-col justify-center items-center">
+                                {parsedLyrics.length > 0 ? (
+                                    <div className="text-center transition-all duration-300">
+                                        <h2 className="text-2xl md:text-4xl font-bold text-white drop-shadow-md leading-tight">
+                                            {currentLine?.text}
+                                        </h2>
+                                        {currentLineIndex + 1 < parsedLyrics.length && (
+                                            <p className="mt-6 text-lg md:text-xl text-neutral-500 leading-tight">
+                                                {parsedLyrics[currentLineIndex + 1].text}
+                                            </p>
+                                        )}
+                                    </div>
+                                ) : current.lyrics ? (
                                     <pre className="whitespace-pre-wrap font-sans text-neutral-300 text-sm md:text-base leading-relaxed text-center">
                                         {current.lyrics}
                                     </pre>
                                 ) : (
                                     <p className="text-center text-neutral-500 italic mt-20">
-                                        Текст песни не добавлен.
+                                        Текст песни не найден.
                                     </p>
                                 )}
                             </div>
