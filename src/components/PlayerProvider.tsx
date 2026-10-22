@@ -420,17 +420,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                             </p>
 
                             {/* ВЫВОД ТЕКСТА ПЕСНИ (КАРАОКЕ) */}
-                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-hidden border border-white/5 flex flex-col justify-center items-center relative">
+                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 flex flex-col justify-center items-center custom-scrollbar min-h-[220px]">
                                 {parsedLyrics.length > 0 ? (
                                     <div className="text-center transition-all duration-300 w-full px-4">
                                         {/* Текущая строчка (большая) */}
-                                        <h2 className="text-2xl md:text-4xl font-bold text-white drop-shadow-md leading-tight mb-6">
+                                        <h2 className="text-xl md:text-3xl font-bold text-white drop-shadow-md leading-snug mb-4 whitespace-pre-wrap">
                                             {currentLine?.text}
                                         </h2>
 
                                         {/* Следующая строчка (маленькая и серая) */}
                                         {currentLineIndex + 1 < parsedLyrics.length && (
-                                            <p className="text-lg md:text-xl text-neutral-500 leading-tight opacity-70">
+                                            <p className="text-base md:text-lg text-neutral-500 leading-snug opacity-70 whitespace-pre-wrap">
                                                 {parsedLyrics[currentLineIndex + 1].text}
                                             </p>
                                         )}
