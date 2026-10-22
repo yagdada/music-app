@@ -18,8 +18,8 @@ export type PlayerTrack = {
     file_path: string;
     cover_url?: string | null;
     lyrics?: string | null;
-    duration?: number | null; // <--- ДОБАВИЛИ
-    synced_lyrics?: string | null; // <--- ДОБАВИЛИ
+    duration?: number | null;
+    synced_lyrics?: string | null;
     owner_name?: string;
 };
 
@@ -63,7 +63,6 @@ function parseLrc(lrc: string) {
             }
         }
     }
-    // Сортируем на всякий случай по времени
     return result.sort((a, b) => a.time - b.time);
 }
 
@@ -108,7 +107,6 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         return parsedLyrics[0];
     }, [parsedLyrics, currentTime]);
 
-    // Индекс следующей строчки для красивого отображения
     const currentLineIndex = currentLine ? parsedLyrics.indexOf(currentLine) : -1;
 
     useEffect(() => {
@@ -422,14 +420,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                             </p>
 
                             {/* ВЫВОД ТЕКСТА ПЕСНИ (КАРАОКЕ) */}
-                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 custom-scrollbar flex flex-col justify-center items-center">
+                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-hidden border border-white/5 flex flex-col justify-center items-center relative">
                                 {parsedLyrics.length > 0 ? (
-                                    <div className="text-center transition-all duration-300">
-                                        <h2 className="text-2xl md:text-4xl font-bold text-white drop-shadow-md leading-tight">
+                                    <div className="text-center transition-all duration-300 w-full px-4">
+                                        {/* Текущая строчка (большая) */}
+                                        <h2 className="text-2xl md:text-4xl font-bold text-white drop-shadow-md leading-tight mb-6">
                                             {currentLine?.text}
                                         </h2>
+
+                                        {/* Следующая строчка (маленькая и серая) */}
                                         {currentLineIndex + 1 < parsedLyrics.length && (
-                                            <p className="mt-6 text-lg md:text-xl text-neutral-500 leading-tight">
+                                            <p className="text-lg md:text-xl text-neutral-500 leading-tight opacity-70">
                                                 {parsedLyrics[currentLineIndex + 1].text}
                                             </p>
                                         )}
