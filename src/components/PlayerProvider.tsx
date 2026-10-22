@@ -400,9 +400,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
 
-                    <div className="flex w-full max-w-5xl flex-col items-center gap-10 md:flex-row md:items-stretch md:gap-16 h-full max-h-[600px]">
-                        {/* Обложка */}
-                        <div className="h-64 w-64 md:h-auto md:w-[400px] shrink-0 overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+                    <div className="flex w-full max-w-5xl flex-col items-center gap-10 md:flex-row md:items-stretch md:gap-16 h-auto md:h-[500px]">
+                        {/* Обложка (фиксированный квадрат) */}
+                        <div className="h-64 w-64 md:h-[500px] md:w-[500px] shrink-0 overflow-hidden rounded-2xl border border-white/10 shadow-2xl aspect-square">
                             {current.cover_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={current.cover_url} alt="cover" className="h-full w-full object-cover" />
@@ -425,7 +425,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                 </p>
                             </div>
 
-                            {/* ЦЕНТР: Караоке блок (растягивается) */}
+                            {/* ЦЕНТР: Караоке блок */}
                             <div className="w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 flex flex-col justify-center items-center custom-scrollbar">
                                 {parsedLyrics.length > 0 ? (
                                     <div className="text-center transition-all duration-300 w-full px-4">
