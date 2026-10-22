@@ -400,8 +400,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
                     </button>
 
-                    <div className="flex w-full max-w-5xl flex-col items-center gap-10 md:flex-row md:items-start md:gap-16">
-                        <div className="h-64 w-64 md:h-[400px] md:w-[400px] shrink-0 overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
+                    <div className="flex w-full max-w-5xl flex-col items-center gap-10 md:flex-row md:items-stretch md:gap-16 h-full max-h-[600px]">
+                        {/* Обложка */}
+                        <div className="h-64 w-64 md:h-auto md:w-[400px] shrink-0 overflow-hidden rounded-2xl border border-white/10 shadow-2xl">
                             {current.cover_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={current.cover_url} alt="cover" className="h-full w-full object-cover" />
@@ -412,24 +413,25 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                             )}
                         </div>
 
-                        <div className="flex w-full min-w-0 flex-col items-center md:items-start h-[400px]">
-                            {/* НАЗВАНИЕ И ИСПОЛНИТЕЛЬ В ПОЛНОЭКРАННОМ РЕЖИМЕ */}
-                            <h1 className="text-3xl md:text-5xl font-bold text-center md:text-left truncate w-full">{current.title}</h1>
-                            <p className="mt-3 text-lg text-neutral-400 text-center md:text-left truncate w-full">
-                                {current.artist || "Неизвестный исполнитель"}
-                                {current.owner_name ? ` · ${current.owner_name}` : ""}
-                            </p>
+                        {/* Правая колонка (Название, Текст, Кнопки) */}
+                        <div className="flex w-full min-w-0 flex-col justify-between h-full py-2">
 
-                            {/* ВЫВОД ТЕКСТА ПЕСНИ (КАРАОКЕ) */}
-                            <div className="mt-8 w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 flex flex-col justify-center items-center custom-scrollbar min-h-[220px]">
+                            {/* ВЕРХ: Название и исполнитель */}
+                            <div className="w-full text-center md:text-left mb-6 shrink-0">
+                                <h1 className="text-2xl md:text-4xl font-bold truncate w-full">{current.title}</h1>
+                                <p className="mt-2 text-base md:text-lg text-neutral-400 truncate w-full">
+                                    {current.artist || "Неизвестный исполнитель"}
+                                    {current.owner_name ? ` · ${current.owner_name}` : ""}
+                                </p>
+                            </div>
+
+                            {/* ЦЕНТР: Караоке блок (растягивается) */}
+                            <div className="w-full flex-1 rounded-2xl bg-white/5 p-6 overflow-y-auto border border-white/5 flex flex-col justify-center items-center custom-scrollbar">
                                 {parsedLyrics.length > 0 ? (
                                     <div className="text-center transition-all duration-300 w-full px-4">
-                                        {/* Текущая строчка (большая) */}
                                         <h2 className="text-xl md:text-3xl font-bold text-white drop-shadow-md leading-snug mb-4 whitespace-pre-wrap">
                                             {currentLine?.text}
                                         </h2>
-
-                                        {/* Следующая строчка (маленькая и серая) */}
                                         {currentLineIndex + 1 < parsedLyrics.length && (
                                             <p className="text-base md:text-lg text-neutral-500 leading-snug opacity-70 whitespace-pre-wrap">
                                                 {parsedLyrics[currentLineIndex + 1].text}
@@ -441,13 +443,14 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                         {current.lyrics}
                                     </pre>
                                 ) : (
-                                    <p className="text-center text-neutral-500 italic mt-20">
+                                    <p className="text-center text-neutral-500 italic mt-10">
                                         Текст песни не найден.
                                     </p>
                                 )}
                             </div>
 
-                            <div className="mt-6 w-full flex flex-col gap-2">
+                            {/* НИЗ: Ползунок и кнопки управления */}
+                            <div className="mt-6 w-full flex flex-col gap-2 shrink-0">
                                 <div className="flex items-center gap-3 w-full">
                                     <span className="text-xs text-neutral-400 tabular-nums w-10 text-right">
                                         {formatTime(currentTime)}
@@ -499,6 +502,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
                                     <div className="w-12"></div>
                                 </div>
                             </div>
+
                         </div>
                     </div>
                 </div>
